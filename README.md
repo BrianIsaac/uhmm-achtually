@@ -1,6 +1,10 @@
+<img src="chrome-extension/assets/talking-pose.png" alt="Uhmm Achtually Mascot" width="100" align="left">
+
 # Uhmm Achtually - Real-time AI Fact Checker
 
 A real-time fact-checking system that monitors conversations in video meetings and YouTube, extracts factual claims, and verifies them using AI and web search. Features an animated mascot that alerts you when questionable claims are detected.
+
+<br clear="left">
 
 ## Features
 
@@ -365,3 +369,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [FastAPI](https://fastapi.tiangolo.com/) for the WebSocket server framework
 - [Pipecat](https://github.com/pipecat-ai/pipecat) for audio processing components
 - [Avalon](https://avalon.ai) for alternative STT services
+
+<br>
+<p align="right">
+  <img src="chrome-extension/assets/thinking-pose.png" alt="Thinking Pose" width="120">
+</p>
