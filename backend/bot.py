@@ -1,0 +1,154 @@
+"""Main entry point for the fact-checker bot.
+
+Initialises and runs the Pipecat pipeline with all 6 stages:
+- Stage 1: DailyTransport with Silero VAD
+- Stage 2: GroqSTTService
+- Stage 3: SentenceAggregator
+- Stage 4: ClaimExtractor
+- Stage 5: WebFactChecker
+- Stage 6: FactCheckMessenger
+"""
+
+import asyncio
+import os
+import sys
+from dotenv import load_dotenv
+
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineTask
+from pipecat.transports.daily.transport import DailyParams, DailyTransport
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.services.groq.stt import GroqSTTService
+
+from src.utils.config import get_settings, get_dev_config
+from src.utils.logger import setup_logger
+from src.processors.sentence_aggregator import SentenceAggregator
+from src.processors.claim_extractor import ClaimExtractor
+from src.processors.web_fact_checker import WebFactChecker
+from src.processors.fact_check_messenger import FactCheckMessenger
+from src.processors.continuous_audio_aggregator import ContinuousAudioAggregator
+
+# Load environment variables
+load_dotenv()
+
+logger = setup_logger(__name__)
+
+
+async def main():
+    """Run the fact-checker bot with complete Pipecat pipeline (Stages 1-6)."""
+    settings = get_settings()
+    dev_config = get_dev_config()
+    logger.info("Starting fact-checker bot (All 6 stages)...")
+    logger.info(f"Daily room URL: {settings.daily_room_url}")
+    logger.info(f"VAD disabled: {dev_config.vad.disable}")
+
+    try:
+        # Stage 1: DailyTransport (with or without VAD based on config)
+        if dev_config.vad.disable:
+            # No VAD - continuous audio processing
+            logger.info("VAD disabled - using continuous audio processing")
+            transport = DailyTransport(
+                settings.daily_room_url,
+                None,  # No token for public rooms
+                "Fact Checker Bot",
+                DailyParams(
+                    audio_in_enabled=True,
+                    audio_out_enabled=False,  # No TTS in Phase 1
+                    vad_enabled=False
+                )
+            )
+        else:
+            # VAD enabled - traditional segmented approach
+            logger.info(
+                f"VAD enabled - start_secs={dev_config.vad.start_secs}, "
+                f"stop_secs={dev_config.vad.stop_secs}, "
+                f"min_volume={dev_config.vad.min_volume}"
+            )
+            transport = DailyTransport(
+                settings.daily_room_url,
+                None,  # No token for public rooms
+                "Fact Checker Bot",
+                DailyParams(
+                    audio_in_enabled=True,
+                    audio_out_enabled=False,  # No TTS in Phase 1
+                    vad_analyzer=SileroVADAnalyzer()
+                )
+            )
+
+        # Stage 2: GroqSTTService (Whisper Large v3 Turbo)
+        stt = GroqSTTService(
+            api_key=settings.groq_api_key,
+            model=dev_config.stt.model,
+            language=dev_config.stt.language
+        )
+
+        # Stage 3: SentenceAggregator
+        aggregator = SentenceAggregator()
+
+        # Stage 4: ClaimExtractor
+        claim_extractor = ClaimExtractor(groq_api_key=settings.groq_api_key)
+
+        # Stage 5: WebFactChecker
+        if settings.exa_api_key:
+            fact_checker = WebFactChecker(
+                exa_api_key=settings.exa_api_key,
+                groq_api_key=settings.groq_api_key,
+                allowed_domains=settings.allowed_domains_list
+            )
+            logger.info("Exa fact-checking enabled")
+        else:
+            logger.warning("EXA_API_KEY not found - fact-checking disabled")
+            fact_checker = None
+
+        # Stage 6: FactCheckMessenger (reuses DailyTransport)
+        if fact_checker:
+            messenger = FactCheckMessenger(transport=transport)
+            logger.info("App message broadcasting enabled")
+        else:
+            messenger = None
+
+        # Build pipeline (conditionally include Stages 4-6)
+        pipeline_stages = [
+            transport.input(),
+        ]
+
+        # Add STT stage (with or without continuous audio aggregator)
+        if dev_config.vad.disable:
+            # Insert ContinuousAudioAggregator before sentence aggregator
+            continuous_audio = ContinuousAudioAggregator(stt_service=stt)
+            pipeline_stages.append(continuous_audio)
+        else:
+            # Use traditional VAD-based STT
+            pipeline_stages.append(stt)
+
+        pipeline_stages.append(aggregator)
+
+        if claim_extractor:
+            pipeline_stages.append(claim_extractor)
+
+        if fact_checker:
+            pipeline_stages.append(fact_checker)
+
+        if messenger:
+            pipeline_stages.append(messenger)
+
+        pipeline_stages.append(transport.output())
+
+        pipeline = Pipeline(pipeline_stages)
+
+        task = PipelineTask(pipeline)
+
+        # Run the pipeline
+        runner = PipelineRunner()
+        await runner.run(task)
+
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt, shutting down...")
+    except Exception as e:
+        logger.error(f"Error running bot: {e}", exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
