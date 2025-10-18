@@ -59,7 +59,7 @@ class ClaimExtractionService:
         except KeyError as e:
             # Specific handling for KeyError to get better diagnostics
             logger.error(f"KeyError during claim extraction - missing key: {e!r}")
-            logger.error(f"Full traceback:", exc_info=True)
+            logger.error("Full traceback:", exc_info=True)
             raise ClaimExtractionError(
                 "Missing expected key in response",
                 {"text_preview": text[:100], "missing_key": str(e), "error_type": "KeyError"}
@@ -74,7 +74,7 @@ class ClaimExtractionService:
         except Exception as e:
             # Unexpected errors - log the repr for better error visibility
             logger.error(f"Unexpected error extracting claims: type={type(e).__name__}, error={e!r}")
-            logger.error(f"Full traceback:", exc_info=True)
+            logger.error("Full traceback:", exc_info=True)
             raise ClaimExtractionError(
                 "Failed to extract claims from text",
                 {"text_length": len(text), "error": str(e), "error_type": type(e).__name__}
