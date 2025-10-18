@@ -22,11 +22,6 @@ class Settings(BaseSettings):
         case_sensitive=False
     )
 
-    # Daily.co
-    DAILY_API_KEY: str
-    DAILY_ROOM_URL: str
-    DAILY_BOT_TOKEN: str | None = None
-
     # APIs
     GROQ_API_KEY: str
     AVALON_API_KEY: str | None = None
