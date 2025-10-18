@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "python-dotenv>=1.0.0",
-    "pipecat-ai[daily,silero]>=0.0.90",
+    "pipecat-ai[silero]>=0.0.90",
 ]
 
 [project.optional-dependencies]
