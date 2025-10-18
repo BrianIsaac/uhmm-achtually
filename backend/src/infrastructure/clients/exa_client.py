@@ -42,11 +42,15 @@ class ExaClient:
             response = await asyncio.to_thread(
                 self.exa.search_and_contents,
                 claim,
-                type="keyword",  # Use keyword search for speed (< 0.5s)
-                use_autoprompt=False,  # Disabled for speed
-                num_results=min(num_results, 3),  # Limit to 3 for faster response
+                type="auto",  # Use auto (API default) for intelligent hybrid search
+                use_autoprompt=True,  # Enable query enhancement (minimal latency impact)
+                num_results=min(num_results, 2),  # Ultra-low latency: only 2 results
                 include_domains=self.allowed_domains,
-                text={"max_characters": 1000}  # Reduced for faster response
+                text={"max_characters": 2000},  # More context per result
+                highlights={
+                    "num_sentences": 2,
+                    "highlights_per_url": 1
+                }
             )
 
             # Check if response has results

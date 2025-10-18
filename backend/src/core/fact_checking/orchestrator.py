@@ -9,6 +9,7 @@ from src.core.transcription.service import TranscriptionService
 from src.core.nlp.sentence_aggregator import SentenceAggregator
 from src.core.nlp.claim_extraction_service import ClaimExtractionService
 from src.core.fact_checking.verification_service import VerificationService
+from src.utils.deduplication import TranscriptionDeduplicator, ClaimDeduplicator
 from src.domain.exceptions import (
     ClaimExtractionError,
     VerificationError,
@@ -53,6 +54,10 @@ class FactCheckingOrchestrator:
         self.verification_service = verification_service
         self.message_factory = MessageFactory()
 
+        # Initialize deduplicators
+        self.transcription_dedup = TranscriptionDeduplicator(ttl_seconds=10.0)  # 10s for transcriptions
+        self.claim_dedup = ClaimDeduplicator(ttl_seconds=60.0)  # 60s for claims
+
     async def process_audio_transcription(self, transcription: str) -> None:
         """
         Process a transcription from audio input.
@@ -80,6 +85,11 @@ class FactCheckingOrchestrator:
         if not text or not text.strip():
             return
 
+        # Check for duplicate transcription
+        if self.transcription_dedup.is_duplicate(text):
+            logger.debug(f"Skipping duplicate transcription: {text[:50]}...")
+            return
+
         speaker = speaker or "Speaker"
 
         # Broadcast transcript message
@@ -96,7 +106,19 @@ class FactCheckingOrchestrator:
 
         # Aggregate into sentences
         try:
+            # Add punctuation if missing (common in transcriptions)
+            if text and not text.rstrip().endswith(('.', '!', '?')):
+                text = text.rstrip() + '.'
+
             complete_sentences = self.sentence_aggregator.add_text(text)
+
+            # If no complete sentences but we have pending text, force flush
+            # This handles cases where transcription doesn't have proper punctuation
+            if not complete_sentences:
+                pending = self.sentence_aggregator.get_pending_text()
+                if pending and len(pending) > 100:  # If pending text is significant
+                    complete_sentences = self.sentence_aggregator.force_flush()
+
         except Exception as e:
             raise SentenceAggregationError(
                 f"Failed to aggregate text into sentences",
@@ -190,23 +212,31 @@ class FactCheckingOrchestrator:
             speaker: The speaker identifier
         """
         try:
-            # Verify the claim
-            try:
-                verdict = await self.verification_service.verify_claim(claim)
-            except VerificationError as e:
-                logger.error(f"Verification failed for claim: {e.message}", extra=e.details)
-                error_message = self.message_factory.create_error_message(
-                    error=f"Failed to verify claim: {e.message}",
-                    details={**e.details, "claim": claim.text}
-                )
-                await self.connection_manager.broadcast(error_message)
-                return
-            except Exception as e:
-                logger.error(f"Unexpected error during verification: {e}", exc_info=True)
-                raise VerificationError(
-                    "Unexpected error during claim verification",
-                    {"claim": claim.text, "error": str(e)}
-                )
+            # Check for cached verification result
+            cached_verdict = self.claim_dedup.get_cached_result(claim.text)
+            if cached_verdict:
+                logger.info(f"Using cached verdict for claim: {claim.text[:50]}...")
+                verdict = cached_verdict
+            else:
+                # Verify the claim
+                try:
+                    verdict = await self.verification_service.verify_claim(claim)
+                    # Cache the result for future use
+                    self.claim_dedup.cache_result(claim.text, verdict)
+                except VerificationError as e:
+                    logger.error(f"Verification failed for claim: {e.message}", extra=e.details)
+                    error_message = self.message_factory.create_error_message(
+                        error=f"Failed to verify claim: {e.message}",
+                        details={**e.details, "claim": claim.text}
+                    )
+                    await self.connection_manager.broadcast(error_message)
+                    return
+                except Exception as e:
+                    logger.error(f"Unexpected error during verification: {e}", exc_info=True)
+                    raise VerificationError(
+                        "Unexpected error during claim verification",
+                        {"claim": claim.text, "error": str(e)}
+                    )
 
             # Create and broadcast verdict message
             try:

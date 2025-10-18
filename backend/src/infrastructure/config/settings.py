@@ -19,13 +19,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"  # Ignore extra fields from environment
     )
-
-    # Daily.co
-    DAILY_API_KEY: str
-    DAILY_ROOM_URL: str
-    DAILY_BOT_TOKEN: str | None = None
 
     # APIs
     GROQ_API_KEY: str

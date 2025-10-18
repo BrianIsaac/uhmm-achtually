@@ -41,7 +41,7 @@ stt:
 
   # Groq Whisper settings
   groq:
-    model: "whisper-large-v3-turbo"
+    model: "whisper-large-v3"
     language: "en"
 
   # AquaVoice Avalon settings

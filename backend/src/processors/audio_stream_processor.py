@@ -46,8 +46,8 @@ class AudioStreamProcessor:
         # Audio processing parameters
         self.silence_threshold = 0.01
         self.min_speech_duration = 0.5  # Minimum seconds of speech
-        self.max_speech_duration = 30.0  # Maximum seconds before forcing transcription
-        self.silence_duration = 1.5  # Seconds of silence to trigger processing
+        self.max_speech_duration = 10.0  # Maximum seconds before forcing transcription (reduced for lower latency)
+        self.silence_duration = 1.0  # Seconds of silence to trigger processing (reduced for quicker response)
 
         # State management
         self.is_running = False
@@ -94,6 +94,10 @@ class AudioStreamProcessor:
             if (self.chunk_start_time and
                 current_time - self.chunk_start_time > self.max_speech_duration):
                 self._queue_audio_chunk()
+                # Reset for next chunk
+                self.current_chunk = []
+                self.chunk_start_time = current_time
+                logger.debug("Max duration reached, starting new chunk")
 
         else:
             # Silence detected

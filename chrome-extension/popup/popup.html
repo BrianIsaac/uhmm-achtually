@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Uhmm Actually Settings</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <h1>🎯 Uhmm Actually</h1>
+      <p class="subtitle">AI Fact-Checker for Meetings</p>
+    </div>
+
+    <div class="popup-content">
+      <!-- Connection Status -->
+      <div class="status-section">
+        <div class="status-row">
+          <span class="status-label">Backend Status:</span>
+          <span id="connection-status" class="status-badge status-disconnected">Disconnected</span>
+        </div>
+        <button id="reconnect-btn" class="btn btn-secondary">Reconnect</button>
+      </div>
+
+      <!-- Settings -->
+      <div class="settings-section">
+        <h3>Settings</h3>
+
+        <div class="setting-item">
+          <label for="backend-url">Backend URL:</label>
+          <input type="text" id="backend-url" value="ws://localhost:8765" readonly>
+        </div>
+
+        <div class="setting-item">
+          <label class="checkbox-label">
+            <input type="checkbox" id="overlay-enabled" checked>
+            <span>Enable Overlay</span>
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label class="checkbox-label">
+            <input type="checkbox" id="auto-scroll" checked>
+            <span>Auto-scroll Transcript</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Quick Info -->
+      <div class="info-section">
+        <h3>How to Use</h3>
+        <ol>
+          <li>Start the Python backend server</li>
+          <li>Join a Zoom/Meet/Teams meeting</li>
+          <li>Speak and see live transcripts</li>
+          <li>False claims highlighted automatically!</li>
+        </ol>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <a href="https://github.com" target="_blank" class="link">GitHub</a>
+        <span class="divider">•</span>
+        <a href="#" class="link">Help</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

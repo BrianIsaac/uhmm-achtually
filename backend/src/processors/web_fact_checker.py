@@ -3,10 +3,10 @@
 import json
 import os
 import time
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic_ai import Agent
 
 from src.domain.models import Claim, FactCheckVerdict
@@ -15,20 +15,22 @@ from src.infrastructure.config import get_dev_config, get_prompts
 
 
 class VerificationResult(BaseModel):
-    """Structured result from fact verification."""
+    """Structured result from fact verification - loosened validation."""
 
-    status: Literal["supported", "contradicted", "unclear", "not_found"] = Field(
+    # Use Any type with defaults to handle unexpected responses
+    status: Any = Field(
+        default="unclear",
         description="Verdict status: supported, contradicted, unclear, or not_found"
     )
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
+    confidence: Any = Field(
+        default=0.0,
         description="Confidence level between 0 and 1"
     )
-    rationale: str = Field(
+    rationale: Any = Field(
+        default="Unable to verify",
         description="1-2 sentence explanation of the verdict"
     )
-    evidence_url: str = Field(
+    evidence_url: Any = Field(
         default="",
         description="Most relevant source URL, or empty string if none"
     )
@@ -133,8 +135,32 @@ class WebFactChecker:
 
             return verdict
 
+        except ValidationError as e:
+            logger.error(f"Pydantic validation error during fact-checking for '{claim_text}': {e!r}")
+            logger.error(f"Validation errors: {e.errors()}")
+            logger.error(f"Full traceback:", exc_info=True)
+            # Return a safe default verdict on validation error
+            return FactCheckVerdict(
+                claim=claim_text,
+                status="unclear",
+                confidence=0.0,
+                rationale=f"Fact-checking failed: invalid response format",
+                evidence_url=None,
+            )
+        except KeyError as e:
+            logger.error(f"KeyError during fact-checking for '{claim_text}' - missing key: {e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
+            # Return a safe default verdict on error
+            return FactCheckVerdict(
+                claim=claim_text,
+                status="unclear",
+                confidence=0.0,
+                rationale=f"Fact-checking failed: missing expected data field",
+                evidence_url=None,
+            )
         except Exception as e:
-            logger.error(f"Fact-checking failed for '{claim_text}': {e}", exc_info=True)
+            logger.error(f"Fact-checking failed for '{claim_text}': type={type(e).__name__}, error={e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
             # Return a safe default verdict on error
             return FactCheckVerdict(
                 claim=claim_text,
@@ -196,18 +222,60 @@ class WebFactChecker:
         )
 
         # Use PydanticAI agent to get structured verification
-        result = await self.verification_agent.run(user_prompt)
+        try:
+            result = await self.verification_agent.run(user_prompt)
 
-        # Get the structured output
-        verification = result.output
+            # Get the structured output - handle different result formats
+            if hasattr(result, 'output'):
+                verification = result.output
+            elif hasattr(result, 'data'):
+                verification = result.data
+            else:
+                # Log what we actually got
+                logger.error(f"Unexpected result format from PydanticAI: {type(result)}")
+                logger.error(f"Result attributes: {dir(result) if hasattr(result, '__dict__') else 'No attributes'}")
+                raise ValueError(f"Unexpected result format from PydanticAI agent: {type(result)}")
+        except ValidationError as e:
+            logger.error(f"Pydantic validation error in PydanticAI verification: {e!r}")
+            logger.error(f"Validation errors: {e.errors()}")
+            logger.error(f"Full traceback:", exc_info=True)
+            raise
+        except KeyError as e:
+            logger.error(f"KeyError in PydanticAI verification - missing key: {e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"PydanticAI verification failed: type={type(e).__name__}, error={e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
+            raise
 
-        # Convert to FactCheckVerdict
+        # Convert to FactCheckVerdict - handle Any types safely
+        # Normalize status to valid values
+        status_str = str(verification.status).lower() if verification.status else "unclear"
+        if status_str not in ["supported", "contradicted", "unclear", "not_found"]:
+            logger.warning(f"Invalid status '{status_str}', defaulting to 'unclear'")
+            status_str = "unclear"
+
+        # Normalize confidence to float
+        try:
+            confidence_val = float(verification.confidence) if verification.confidence is not None else 0.0
+            confidence_val = max(0.0, min(1.0, confidence_val))  # Clamp to [0, 1]
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid confidence '{verification.confidence}', defaulting to 0.0")
+            confidence_val = 0.0
+
+        # Ensure rationale is string
+        rationale_str = str(verification.rationale) if verification.rationale else "Unable to verify"
+
+        # Handle evidence URL
+        evidence_url_str = str(verification.evidence_url) if verification.evidence_url else None
+
         verdict = FactCheckVerdict(
             claim=claim_text,
-            status=verification.status,
-            confidence=verification.confidence,
-            rationale=verification.rationale,
-            evidence_url=verification.evidence_url if verification.evidence_url else None,
+            status=status_str,
+            confidence=confidence_val,
+            rationale=rationale_str,
+            evidence_url=evidence_url_str,
         )
 
         return verdict

@@ -4,6 +4,7 @@ import os
 from typing import List
 
 from loguru import logger
+from pydantic import ValidationError
 from pydantic_ai import Agent
 
 from src.domain.models import Claim, ClaimExtractionResult
@@ -55,23 +56,76 @@ class ClaimExtractor:
         logger.info(f"[CLAIM_EXTRACTOR] Extracting claims from: {sentence}")
 
         try:
-            # Run the agent to extract claims
-            result = await self.agent.run(sentence)
+            # Run the agent to extract claims with retry on malformed responses
+            max_retries = 2
+            for attempt in range(max_retries + 1):
+                try:
+                    result = await self.agent.run(sentence)
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    if "tool_use_failed" in str(e) and attempt < max_retries:
+                        logger.warning(f"Malformed LLM response on attempt {attempt + 1}, retrying...")
+                        continue
+                    raise  # Re-raise if not a tool_use error or out of retries
 
-            # Get the structured output
-            extraction_result = result.output
+            # Get the structured output - handle different result formats
+            if hasattr(result, 'output'):
+                extraction_result = result.output
+            elif hasattr(result, 'data'):
+                extraction_result = result.data
+            else:
+                logger.error(f"Unexpected result format: {type(result)}")
+                logger.debug(f"Result: {result}")
+                return []
 
-            if extraction_result.has_claims:
-                logger.info(f"Extracted {len(extraction_result.claims)} claims")
-                for claim in extraction_result.claims:
-                    logger.info(f"  - {claim.text} ({claim.claim_type})")
+            # Safely access claims with fallback
+            if hasattr(extraction_result, 'claims'):
+                claims = extraction_result.claims
+            else:
+                logger.warning(f"No claims attribute in result: {extraction_result}")
+                return []
+
+            if claims and len(claims) > 0:
+                logger.info(f"Extracted {len(claims)} claims")
+                for claim in claims:
+                    # Safely access claim attributes
+                    claim_text = getattr(claim, 'text', str(claim))
+                    claim_type = getattr(claim, 'claim_type', 'unknown')
+                    logger.info(f"  - {claim_text} ({claim_type})")
             else:
                 logger.info("No factual claims found in sentence")
 
-            return extraction_result.claims
+            return claims
 
+        except ValidationError as e:
+            logger.error(f"Pydantic validation error during claim extraction: {e!r}")
+            logger.error(f"Validation errors: {e.errors()}")
+            logger.error(f"Full traceback:", exc_info=True)
+            # Log what we received if available
+            if 'result' in locals():
+                logger.debug(f"Result that failed validation: {result}")
+            return []
+        except KeyError as e:
+            logger.error(f"KeyError during claim extraction: {e!r}")
+            logger.error(f"Missing key: {str(e)}, Full traceback:", exc_info=True)
+            # Log what we actually received for debugging
+            if 'result' in locals():
+                logger.debug(f"Result type: {type(result)}")
+                logger.debug(f"Result attributes: {dir(result) if hasattr(result, '__dir__') else 'No attributes'}")
+                if hasattr(result, '__dict__'):
+                    logger.debug(f"Result dict: {result.__dict__}")
+            return []
+        except AttributeError as e:
+            logger.error(f"AttributeError during claim extraction: {e!r}")
+            logger.error(f"Missing attribute: {str(e)}, Full traceback:", exc_info=True)
+            # Log what we actually received for debugging
+            if 'result' in locals():
+                logger.debug(f"Result type: {type(result)}")
+                logger.debug(f"Result attributes: {dir(result) if hasattr(result, '__dir__') else 'No attributes'}")
+            return []
         except Exception as e:
-            logger.error(f"Claim extraction failed: {e}", exc_info=True)
+            logger.error(f"Claim extraction failed: type={type(e).__name__}, error={e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
             # Return empty list on failure to keep pipeline running
             return []
 
