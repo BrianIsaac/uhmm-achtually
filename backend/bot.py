@@ -1,47 +1,35 @@
 """Main entry point for the fact-checker bot.
 
-Initialises and runs the Pipecat pipeline with all 6 stages:
-- Stage 1: DailyTransport with Silero VAD
-- Stage 2: GroqSTTService
-- Stage 3: SentenceAggregator
-- Stage 4: ClaimExtractor
-- Stage 5: WebFactChecker
-- Stage 6: FactCheckMessenger
+Initialises and runs the Pipecat pipeline using V2 processors with PydanticAI.
 """
 
 import asyncio
 import os
 import sys
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from loguru import logger
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
-from pipecat.transports.daily.transport import DailyParams, DailyTransport
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.transcriptions.language import Language
+from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
-from src.services.stt import GroqSTT, AvalonSTT
-from src.utils.config import get_settings, get_dev_config
-from src.utils.logger import setup_logger
-from src.utils.pipecat_patch import apply_pipecat_patch
-from src.processors.sentence_aggregator import SentenceAggregator
-from src.processors.claim_extractor import ClaimExtractor
-from src.processors.web_fact_checker import WebFactChecker
-from src.processors.fact_check_messenger import FactCheckMessenger
 from src.processors.continuous_audio_aggregator import ContinuousAudioAggregator
-# V2 pipeline bridge
-from src.processors_v2.pipeline_bridge import PipelineBridge
+from src.processors.sentence_aggregator import SentenceAggregator
+from src.processors.pipeline_bridge import PipelineBridge
+from src.services.stt import AvalonSTT, GroqSTT
+from src.utils.config import get_dev_config, get_settings
+from src.utils.pipecat_patch import apply_pipecat_patch
 
 # Load environment variables
 load_dotenv()
 
-logger = setup_logger(__name__)
-
 
 async def main():
-    """Run the fact-checker bot with complete Pipecat pipeline (Stages 1-6)."""
+    """Run the fact-checker bot with V2 pipeline."""
     # IMPORTANT: Apply Pipecat 0.0.90 race condition patch BEFORE creating any processors
     # This fixes: AttributeError: '__process_queue' not found
     # See: https://github.com/pipecat-ai/pipecat/issues/2385
@@ -50,8 +38,8 @@ async def main():
 
     settings = get_settings()
     dev_config = get_dev_config()
-    logger.info("Starting fact-checker bot (All 6 stages)...")
-    logger.info(f"Daily room URL: {settings.daily_room_url}")
+    logger.info("Starting fact-checker bot with V2 pipeline...")
+    logger.info(f"Daily room URL: {settings.DAILY_ROOM_URL}")
     logger.info(f"VAD disabled: {dev_config.vad.disable}")
 
     try:
@@ -60,7 +48,7 @@ async def main():
             # No VAD - continuous audio processing
             logger.info("VAD disabled - using continuous audio processing")
             transport = DailyTransport(
-                settings.daily_room_url,
+                settings.DAILY_ROOM_URL,
                 None,  # No token for public rooms
                 "Fact Checker Bot",
                 DailyParams(
@@ -84,7 +72,7 @@ async def main():
             )
             vad_analyzer = SileroVADAnalyzer(params=vad_params)
             transport = DailyTransport(
-                settings.daily_room_url,
+                settings.DAILY_ROOM_URL,
                 None,  # No token for public rooms
                 "Fact Checker Bot",
                 DailyParams(
@@ -97,7 +85,7 @@ async def main():
         # Stage 2: STT Service (provider-based)
         stt_provider = dev_config.stt.provider
         if stt_provider == "avalon":
-            if not settings.avalon_api_key:
+            if not settings.AVALON_API_KEY:
                 raise ValueError(
                     "AVALON_API_KEY environment variable not set but STT provider is 'avalon'. "
                     "Please add AVALON_API_KEY to your .env file or change provider in dev_config.yaml"
@@ -105,7 +93,7 @@ async def main():
             # Convert language string to Language enum (e.g., "en" -> Language.EN)
             avalon_language = getattr(Language, dev_config.stt.avalon.language.upper())
             stt = AvalonSTT(
-                api_key=settings.avalon_api_key,
+                api_key=settings.AVALON_API_KEY,
                 model=dev_config.stt.avalon.model,
                 language=avalon_language
             )
@@ -117,7 +105,7 @@ async def main():
             # Convert language string to Language enum (e.g., "en" -> Language.EN)
             groq_language = getattr(Language, dev_config.stt.groq.language.upper())
             stt = GroqSTT(
-                api_key=settings.groq_api_key,
+                api_key=settings.GROQ_API_KEY,
                 model=dev_config.stt.groq.model,
                 language=groq_language
             )
@@ -131,56 +119,24 @@ async def main():
         # Stage 3: SentenceAggregator
         aggregator = SentenceAggregator()
 
-        # Use V2 Pipeline if enabled (default: True)
-        use_v2_pipeline = getattr(dev_config, "use_v2_pipeline", True)
+        # Check if we have required API keys for V2 pipeline
+        if not settings.EXA_API_KEY:
+            logger.error("EXA_API_KEY not found - fact-checking requires this API key")
+            raise ValueError("EXA_API_KEY is required for fact-checking functionality")
 
-        if use_v2_pipeline and settings.exa_api_key:
-            # Use new V2 pipeline with PydanticAI and Instructor
-            logger.info("Using V2 Pipeline with PydanticAI and Instructor")
+        # Use V2 pipeline with PydanticAI
+        logger.info("Using V2 Pipeline with PydanticAI")
 
-            pipeline_bridge = PipelineBridge(
-                groq_api_key=settings.groq_api_key,
-                exa_api_key=settings.exa_api_key,
-                daily_transport=transport,
-                allowed_domains=settings.allowed_domains_list
-            )
+        pipeline_bridge = PipelineBridge(
+            groq_api_key=settings.GROQ_API_KEY,
+            exa_api_key=settings.EXA_API_KEY,
+            daily_transport=transport,
+            allowed_domains=settings.allowed_domains_list
+        )
 
-            # For V2, we only need the bridge after aggregator
-            claim_extractor = None
-            fact_checker = None
-            messenger = None
+        logger.info("V2 Pipeline bridge enabled - using modern async processing")
 
-            logger.info("V2 Pipeline bridge enabled - using modern async processing")
-
-        else:
-            # Use original pipeline (fallback)
-            logger.info("Using original Pipecat pipeline")
-
-            # Stage 4: ClaimExtractor
-            claim_extractor = ClaimExtractor(groq_api_key=settings.groq_api_key)
-
-            # Stage 5: WebFactChecker
-            if settings.exa_api_key:
-                fact_checker = WebFactChecker(
-                    exa_api_key=settings.exa_api_key,
-                    groq_api_key=settings.groq_api_key,
-                    allowed_domains=settings.allowed_domains_list
-                )
-                logger.info("Exa fact-checking enabled")
-            else:
-                logger.warning("EXA_API_KEY not found - fact-checking disabled")
-                fact_checker = None
-
-            # Stage 6: FactCheckMessenger (reuses DailyTransport)
-            if fact_checker:
-                messenger = FactCheckMessenger(transport=transport)
-                logger.info("App message broadcasting enabled")
-            else:
-                messenger = None
-
-            pipeline_bridge = None
-
-        # Build pipeline (conditionally include Stages 4-6)
+        # Build pipeline
         pipeline_stages = [
             transport.input(),
         ]
@@ -196,20 +152,8 @@ async def main():
 
         pipeline_stages.append(aggregator)
 
-        # Add either V2 bridge or original processors
-        if pipeline_bridge:
-            # V2 Pipeline: SentenceAggregator -> PipelineBridge
-            pipeline_stages.append(pipeline_bridge)
-        else:
-            # Original Pipeline: SentenceAggregator -> ClaimExtractor -> WebFactChecker -> Messenger
-            if claim_extractor:
-                pipeline_stages.append(claim_extractor)
-
-            if fact_checker:
-                pipeline_stages.append(fact_checker)
-
-            if messenger:
-                pipeline_stages.append(messenger)
+        # Add V2 bridge
+        pipeline_stages.append(pipeline_bridge)
 
         pipeline_stages.append(transport.output())
 
@@ -224,7 +168,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down...")
     except Exception as e:
-        logger.error(f"Error running bot: {e}", exc_info=True)
+        logger.error(f"Error running bot: {e}")
         sys.exit(1)
 
 

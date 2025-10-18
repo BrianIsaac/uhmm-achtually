@@ -1,14 +1,13 @@
 """Bridge between Pipecat frames and the new pipeline."""
 
 import asyncio
-import logging
 from typing import Optional
+
+from loguru import logger
 from pipecat.frames.frames import Frame, TextFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from src.processors_v2.pipeline_coordinator import FactCheckPipeline
-
-logger = logging.getLogger(__name__)
+from src.processors.pipeline_coordinator import FactCheckPipeline
 
 
 class PipelineBridge(FrameProcessor):

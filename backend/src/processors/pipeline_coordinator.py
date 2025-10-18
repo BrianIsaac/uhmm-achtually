@@ -1,17 +1,16 @@
 """Pipeline coordinator for orchestrating the fact-checking pipeline."""
 
 import asyncio
-import logging
 from typing import List, Optional
+
+from loguru import logger
 from pipecat.transports.daily.transport import DailyTransport
 
 from src.models.claim_models import Claim
 from src.models.verdict_models import FactCheckVerdict
-from src.processors_v2.claim_extractor_v2 import ClaimExtractorV2
-from src.processors_v2.web_fact_checker_v2 import WebFactCheckerV2
-from src.processors_v2.fact_check_messenger_v2 import FactCheckMessengerV2
-
-logger = logging.getLogger(__name__)
+from src.processors.claim_extractor import ClaimExtractor
+from src.processors.fact_check_messenger import FactCheckMessenger
+from src.processors.web_fact_checker import WebFactChecker
 
 
 class FactCheckPipeline:
@@ -36,13 +35,13 @@ class FactCheckPipeline:
             daily_transport: DailyTransport for broadcasting
             allowed_domains: Allowed domains for web search
         """
-        self.claim_extractor = ClaimExtractorV2(groq_api_key)
-        self.fact_checker = WebFactCheckerV2(
+        self.claim_extractor = ClaimExtractor(groq_api_key)
+        self.fact_checker = WebFactChecker(
             groq_api_key=groq_api_key,
             exa_api_key=exa_api_key,
             allowed_domains=allowed_domains,
         )
-        self.messenger = FactCheckMessengerV2(daily_transport)
+        self.messenger = FactCheckMessenger(daily_transport)
 
         # Metrics
         self.sentences_processed = 0

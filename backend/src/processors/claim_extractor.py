@@ -1,95 +1,107 @@
-"""Stage 4: ClaimExtractor processor.
+"""ClaimExtractor using PydanticAI for intelligent claim extraction."""
 
-Extract factual claims from sentences using Groq LLM with JSON mode.
-"""
+import os
+from typing import List
 
-import asyncio
-import json
-import logging
-from groq import Groq
-from pipecat.frames.frames import Frame, TextFrame
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from loguru import logger
+from pydantic_ai import Agent
 
-from src.frames.custom_frames import ClaimFrame
-from src.utils.config import get_dev_config
-
-logger = logging.getLogger(__name__)
+from src.models.claim_models import Claim, ClaimExtractionResult
+from src.utils.config import get_dev_config, get_prompts
 
 
-class ClaimExtractor(FrameProcessor):
-    """Extract factual claims from sentences using Groq JSON mode.
+class ClaimExtractor:
+    """Extract factual claims using PydanticAI with Groq.
 
-    Receives LLMMessagesFrame from SentenceAggregator and emits ClaimFrame
-    for each extracted claim.
-    """
-
-    SYSTEM_PROMPT = """
-        Extract factual claims from the sentence.
-        Return a JSON object with an array of claims.
-        Each claim should have 'text' and 'type' fields.
-        Types: version, api, regulatory, definition, number, decision.
-        Only extract verifiable factual statements, not opinions or questions.
-        If no factual claims exist, return empty array.
-
-        Example:
-        {"claims": [{"text": "Python 3.12 removed distutils", "type": "version"}]}
+    This version uses PydanticAI for more reliable structured output
+    and better error handling compared to raw JSON mode.
     """
 
     def __init__(self, groq_api_key: str):
-        """Initialise claim extractor.
+        """Initialize the claim extractor with PydanticAI.
 
         Args:
             groq_api_key: Groq API key for LLM access
         """
-        super().__init__()
-        self.groq_client = Groq(api_key=groq_api_key)
         self._config = get_dev_config()
+        self._prompts = get_prompts()
 
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        """Extract claims from TextFrame.
+        # Set Groq API key in environment for PydanticAI
+        os.environ["GROQ_API_KEY"] = groq_api_key
+
+        # Create PydanticAI agent with Groq model string
+        # Format: "groq:model-name"
+        model_string = f"groq:{self._config.llm.claim_extraction_model}"
+
+        self.agent = Agent(
+            model=model_string,
+            output_type=ClaimExtractionResult,
+            instructions=self._prompts.claim_extraction["system_prompt"],
+        )
+
+        logger.info(
+            f"[CLAIM_EXTRACTOR] Initialized with PydanticAI, model: {self._config.llm.claim_extraction_model}"
+        )
+
+    async def extract(self, sentence: str) -> List[Claim]:
+        """Extract factual claims from a sentence.
 
         Args:
-            frame: Incoming frame
-            direction: Frame direction (upstream/downstream)
+            sentence: The sentence to extract claims from
+
+        Returns:
+            List of extracted claims
         """
-        # DEBUG: Log ALL frames received to diagnose pipeline flow
-        logger.warning(f"🔍 ClaimExtractor received frame: {type(frame).__name__}")
+        logger.info(f"[CLAIM_EXTRACTOR] Extracting claims from: {sentence}")
 
-        # Only process TextFrame
-        if isinstance(frame, TextFrame):
-            sentence = frame.text
-            logger.info(f"Extracting claims from: {sentence}")
+        try:
+            # Run the agent to extract claims
+            result = await self.agent.run(sentence)
 
-            try:
-                # Call Groq with JSON mode (async to avoid blocking)
-                response = await asyncio.to_thread(
-                    self.groq_client.chat.completions.create,
-                    model=self._config.llm.claim_extraction_model,
-                    messages=[
-                        {"role": "system", "content": self.SYSTEM_PROMPT},
-                        {"role": "user", "content": sentence}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=self._config.llm.temperature
-                )
+            # Get the structured output
+            extraction_result = result.output
 
-                # Parse response
-                result = json.loads(response.choices[0].message.content)
-                claims = result.get("claims", [])
+            if extraction_result.has_claims:
+                logger.info(f"Extracted {len(extraction_result.claims)} claims")
+                for claim in extraction_result.claims:
+                    logger.info(f"  - {claim.text} ({claim.claim_type})")
+            else:
+                logger.info("No factual claims found in sentence")
 
-                logger.info(f"Extracted {len(claims)} claims")
+            return extraction_result.claims
 
-                # Emit ClaimFrame for each claim
-                for claim in claims:
-                    claim_frame = ClaimFrame(
-                        text=claim["text"],
-                        claim_type=claim["type"]
-                    )
-                    logger.info(f"Claim: {claim_frame.text} ({claim_frame.claim_type})")
-                    await self.push_frame(claim_frame)
+        except Exception as e:
+            logger.error(f"Claim extraction failed: {e}", exc_info=True)
+            # Return empty list on failure to keep pipeline running
+            return []
 
-            except Exception as e:
-                logger.error(f"Claim extraction failed: {e}", exc_info=True)
+    def extract_sync(self, sentence: str) -> List[Claim]:
+        """Synchronous version of extract for testing.
 
-        # Always forward all frames to next processor (AFTER our processing)
-        await super().process_frame(frame, direction)
+        Args:
+            sentence: The sentence to extract claims from
+
+        Returns:
+            List of extracted claims
+        """
+        logger.info(f"[SYNC] Extracting claims from: {sentence}")
+
+        try:
+            # Run the agent synchronously
+            result = self.agent.run_sync(sentence)
+
+            # Get the structured output
+            extraction_result = result.output
+
+            if extraction_result.has_claims:
+                logger.info(f"[SYNC] Extracted {len(extraction_result.claims)} claims")
+                for claim in extraction_result.claims:
+                    logger.info(f"  - {claim.text} ({claim.claim_type})")
+            else:
+                logger.info("[SYNC] No factual claims found in sentence")
+
+            return extraction_result.claims
+
+        except Exception as e:
+            logger.error(f"[SYNC] Claim extraction failed: {e}", exc_info=True)
+            return []

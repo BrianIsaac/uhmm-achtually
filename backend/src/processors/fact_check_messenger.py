@@ -1,65 +1,142 @@
-"""Stage 6: FactCheckMessenger processor.
+"""FactCheckMessenger for broadcasting verdicts to Daily.co participants."""
 
-Broadcast verdicts via app messages to Vue.js frontend.
-"""
+from typing import Optional
 
-import logging
-from pipecat.frames.frames import Frame
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from loguru import logger
 from pipecat.transports.daily.transport import DailyTransport
 
-from src.frames.custom_frames import VerdictFrame
-
-logger = logging.getLogger(__name__)
+from src.models.verdict_models import FactCheckVerdict
 
 
-class FactCheckMessenger(FrameProcessor):
-    """Send fact-check verdicts via app messages to custom Vue.js frontend.
+class FactCheckMessenger:
+    """Send fact-check verdicts via Daily.co app messages.
 
-    Uses DailyTransport.send_app_message() to broadcast structured JSON.
-    Frontend receives via 'app-message' event listener.
+    This version works directly with Pydantic models instead of
+    Pipecat frames, simplifying the broadcasting logic.
     """
 
-    def __init__(self, transport: DailyTransport, bot_name: str = "Fact Checker Bot"):
-        """Initialise messenger.
+    def __init__(
+        self,
+        transport: DailyTransport,
+        bot_name: str = "Fact Checker Bot",
+    ):
+        """Initialize the messenger.
 
         Args:
-            transport: DailyTransport instance (reuses existing Daily context)
-            bot_name: Bot display name
+            transport: DailyTransport instance for sending messages
+            bot_name: Bot display name for messages
         """
-        super().__init__()
         self.transport = transport
         self.bot_name = bot_name
 
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        """Broadcast verdicts via app messages.
+        logger.info(f"FactCheckMessengerV2 initialized with bot name: {bot_name}")
+
+    async def broadcast(
+        self,
+        verdict: FactCheckVerdict,
+        participant_id: Optional[str] = None,
+    ) -> bool:
+        """Broadcast a fact-check verdict to participants.
 
         Args:
-            frame: Incoming frame
-            direction: Frame direction (upstream/downstream)
+            verdict: The verdict to broadcast
+            participant_id: Specific participant ID, or None for all
+
+        Returns:
+            True if broadcast succeeded, False otherwise
         """
-        # Only process VerdictFrame
-        if isinstance(frame, VerdictFrame):
-            # Format as JSON for frontend consumption
+        try:
+            # Convert verdict to app message format
+            message_data = verdict.to_app_message()
+
+            # Add bot name to message
+            message_data["bot_name"] = self.bot_name
+
+            # Log the broadcast
+            logger.info(
+                f"Broadcasting verdict: {verdict.claim} -> {verdict.status} "
+                f"(confidence: {verdict.confidence:.2f})"
+            )
+
+            # Send to specified participant or all
+            recipient = participant_id or "*"
+
+            # Use DailyTransport to send app message
+            await self.transport.send_app_message(message_data, recipient)
+
+            logger.debug(f"Verdict broadcast to: {recipient}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to broadcast verdict: {e}", exc_info=True)
+            return False
+
+    async def broadcast_error(
+        self,
+        error_message: str,
+        claim: Optional[str] = None,
+        participant_id: Optional[str] = None,
+    ) -> bool:
+        """Broadcast an error message to participants.
+
+        Args:
+            error_message: The error message to send
+            claim: The claim that caused the error (optional)
+            participant_id: Specific participant ID, or None for all
+
+        Returns:
+            True if broadcast succeeded, False otherwise
+        """
+        try:
             message_data = {
-                'type': 'fact-check-verdict',
-                'claim': frame.claim,
-                'status': frame.status,  # 'supported', 'contradicted', 'unclear', 'not_found'
-                'confidence': frame.confidence,
-                'rationale': frame.rationale,
-                'evidence_url': frame.evidence_url
+                "type": "fact-check-error",
+                "error": error_message,
+                "claim": claim,
+                "bot_name": self.bot_name,
             }
 
-            logger.info(f"Broadcasting verdict: {frame.claim} -> {frame.status}")
+            logger.warning(f"Broadcasting error: {error_message}")
 
-            try:
-                # Broadcast to all participants using DailyTransport
-                await self.transport.send_app_message(
-                    message_data,
-                    '*'  # Send to all participants
-                )
-            except Exception as e:
-                logger.error(f"App message send failed: {e}")
+            recipient = participant_id or "*"
+            await self.transport.send_app_message(message_data, recipient)
 
-        # Always forward all frames to next processor (AFTER our processing)
-        await super().process_frame(frame, direction)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to broadcast error: {e}", exc_info=True)
+            return False
+
+    async def broadcast_status(
+        self,
+        status: str,
+        details: Optional[dict] = None,
+        participant_id: Optional[str] = None,
+    ) -> bool:
+        """Broadcast a status update to participants.
+
+        Args:
+            status: Status message (e.g., "processing", "ready")
+            details: Additional details (optional)
+            participant_id: Specific participant ID, or None for all
+
+        Returns:
+            True if broadcast succeeded, False otherwise
+        """
+        try:
+            message_data = {
+                "type": "fact-check-status",
+                "status": status,
+                "details": details or {},
+                "bot_name": self.bot_name,
+            }
+
+            logger.info(f"Broadcasting status: {status}")
+
+            recipient = participant_id or "*"
+            await self.transport.send_app_message(message_data, recipient)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to broadcast status: {e}", exc_info=True)
+            return False

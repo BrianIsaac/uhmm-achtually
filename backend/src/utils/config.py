@@ -2,12 +2,13 @@
 
 Loads settings from environment variables using Pydantic Settings.
 Loads development configuration from dev_config.yaml.
+Loads prompts from prompts.yaml.
 """
 
 import yaml
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Dict, Literal
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,19 +23,19 @@ class Settings(BaseSettings):
     )
 
     # Daily.co
-    daily_api_key: str
-    daily_room_url: str
-    daily_bot_token: str | None = None
+    DAILY_API_KEY: str
+    DAILY_ROOM_URL: str
+    DAILY_BOT_TOKEN: str | None = None
 
     # APIs
-    groq_api_key: str
-    avalon_api_key: str | None = None
-    exa_api_key: str | None = None
+    GROQ_API_KEY: str
+    AVALON_API_KEY: str | None = None
+    EXA_API_KEY: str | None = None
 
     # Configuration
-    allowed_domains: str = "docs.python.org,kubernetes.io,owasp.org,nist.gov,postgresql.org"
-    python_env: str = "development"
-    log_level: str = "INFO"
+    ALLOWED_DOMAINS: str = "docs.python.org,kubernetes.io,owasp.org,nist.gov,postgresql.org"
+    PYTHON_ENV: str = "development"
+    LOG_LEVEL: str = "INFO"
 
     @property
     def allowed_domains_list(self) -> list[str]:
@@ -43,7 +44,7 @@ class Settings(BaseSettings):
         Returns:
             List of allowed domain strings
         """
-        return [d.strip() for d in self.allowed_domains.split(",")]
+        return [d.strip() for d in self.ALLOWED_DOMAINS.split(",")]
 
 
 class VADConfig(BaseModel):
@@ -139,3 +140,39 @@ def get_dev_config() -> DevConfig:
         DevConfig instance
     """
     return load_dev_config()
+
+
+class PromptsConfig(BaseModel):
+    """Prompts configuration loaded from prompts.yaml."""
+    claim_extraction: Dict[str, str]
+    fact_verification: Dict[str, str]
+
+
+def load_prompts() -> PromptsConfig:
+    """Load prompts configuration from YAML file.
+
+    Returns:
+        PromptsConfig instance with loaded prompts
+
+    Raises:
+        FileNotFoundError: If prompts.yaml does not exist
+    """
+    config_path = Path(__file__).parent.parent / "config" / "prompts.yaml"
+
+    if not config_path.exists():
+        raise FileNotFoundError(f"prompts.yaml not found at {config_path}")
+
+    with open(config_path, "r") as f:
+        data = yaml.safe_load(f)
+
+    return PromptsConfig(**data)
+
+
+@lru_cache
+def get_prompts() -> PromptsConfig:
+    """Get cached prompts configuration.
+
+    Returns:
+        PromptsConfig instance
+    """
+    return load_prompts()
