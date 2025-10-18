@@ -7,40 +7,57 @@ from pathlib import Path
 # Add backend directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import WebSocket
+from fastapi import WebSocket, Request
 from dotenv import load_dotenv
 from loguru import logger
 
 from src.api.websocket.server import WebSocketServer
 from src.api.http.endpoints import router as api_router
 
-# Load environment variables
-load_dotenv()
 
-# Create server instance
-ws_server = WebSocketServer()
-
-# Create FastAPI app
-app = ws_server.create_app()
-
-# Include API routes
-app.include_router(api_router)
-
-
-@app.websocket("/")
-async def websocket_endpoint(websocket: WebSocket):
+def create_application() -> tuple:
     """
-    Main WebSocket endpoint for fact-checking.
+    Factory function to create the application.
 
-    This endpoint handles WebSocket connections from Chrome extensions
-    and other clients for real-time fact-checking.
+    Returns:
+        Tuple of (app, ws_server) instances
     """
-    if not ws_server.websocket_handler:
-        logger.error("WebSocket handler not initialized")
-        await websocket.close(code=1011, reason="Server error")
-        return
+    # Load environment variables
+    load_dotenv()
 
-    await ws_server.websocket_handler.handle_connection(websocket)
+    # Create server instance
+    ws_server = WebSocketServer()
+
+    # Create FastAPI app
+    app = ws_server.create_app()
+
+    # Include API routes
+    app.include_router(api_router)
+
+    # Add WebSocket endpoint using app state
+    @app.websocket("/")
+    async def websocket_endpoint(websocket: WebSocket):
+        """
+        Main WebSocket endpoint for fact-checking.
+
+        This endpoint handles WebSocket connections from Chrome extensions
+        and other clients for real-time fact-checking.
+        """
+        # Get server from app state (set in WebSocketServer.create_app())
+        server = app.state.ws_server
+
+        if not server.websocket_handler:
+            logger.error("WebSocket handler not initialized")
+            await websocket.close(code=1011, reason="Server error")
+            return
+
+        await server.websocket_handler.handle_connection(websocket)
+
+    return app, ws_server
+
+
+# Create the application
+app, _ws_server = create_application()
 
 
 if __name__ == "__main__":

@@ -6,27 +6,26 @@ This document provides a detailed code review of the WebSocket server implementa
 
 ## 1. Critical Issues
 
-### 1.1 Global State Management
-**Location**: `websocket_server.py:219-221`
+### 1.1 Global State Management ✅ FIXED
+**Location**: ~~`websocket_server.py:219-221`~~ **RESOLVED in main.py**
 ```python
-# Global instances
-manager = ConnectionManager()
-fact_checking_service = None
-```
-**Issue**: Global mutable state is an anti-pattern that makes testing difficult and can lead to race conditions.
+# OLD: Global instances
+# manager = ConnectionManager()
+# fact_checking_service = None
 
-**Recommendation**: Use dependency injection pattern:
-```python
-class WebSocketServer:
-    def __init__(self):
-        self.manager = ConnectionManager()
-        self.fact_checking_service = None
-
-    def create_app(self) -> FastAPI:
-        app = FastAPI(...)
-        app.state.ws_server = self
-        return app
+# NEW: Factory function with proper encapsulation
+def create_application() -> tuple:
+    ws_server = WebSocketServer()
+    app = ws_server.create_app()
+    app.state.ws_server = ws_server  # Store in app state
+    return app, ws_server
 ```
+**Resolution**:
+- Created factory function `create_application()` to encapsulate initialization
+- Store server instance in `app.state` for proper access
+- Implemented dependency injection using FastAPI's `Depends`
+- Created `src/api/dependencies.py` with proper dependency providers
+- All endpoints now use injected dependencies instead of global state
 
 ### 1.2 Missing Error Boundaries
 **Location**: Multiple locations in `websocket_server.py`
@@ -172,15 +171,16 @@ class MessageFactory:
         }
 ```
 
-### 3.3 Unused Imports
-**Location**: `websocket_server.py`
+### 3.3 Unused Imports ✅ FIXED
+**Location**: ~~`websocket_server.py`~~ **RESOLVED**
 ```python
-import numpy as np  # Not used
-import sounddevice as sd  # Not used
-from collections import deque  # Not used
+# OLD: Had unused imports
+# import numpy as np  # Not used
+# import sounddevice as sd  # Not used
+# from collections import deque  # Not used
 ```
 
-**Recommendation**: Remove unused imports and configure linting tools.
+**Resolution**: Removed all unused imports during the architectural refactoring. The old `websocket_server.py` file has been completely replaced with a clean modular architecture.
 
 ## 4. Security Concerns
 
@@ -399,15 +399,15 @@ class ConnectionManager:
 ## 9. Recommended Refactoring Priority
 
 1. **High Priority** (Immediate):
-   - Fix global state management
+   - ✅ Fix global state management - **COMPLETED**
    - Add input validation
    - Implement proper error handling
    - Remove unused imports
 
 2. **Medium Priority** (Next Sprint):
-   - Restructure directory organization
-   - Split large classes (SRP)
-   - Implement message factory
+   - ✅ Restructure directory organization - **COMPLETED**
+   - ✅ Split large classes (SRP) - **COMPLETED**
+   - ✅ Implement message factory - **COMPLETED**
    - Add rate limiting
 
 3. **Low Priority** (Future):
