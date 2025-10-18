@@ -5,11 +5,11 @@
 
 .uhmm-actually-container {
   position: fixed;
-  bottom: 20px;
+  top: 20px;
   right: 20px;
   width: 450px;
   max-height: 600px;
-  background: rgba(26, 35, 50, 0.98);
+  background: rgba(26, 35, 50, 0.3);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -274,7 +274,7 @@
 @media (max-width: 768px) {
   .uhmm-actually-container {
     width: calc(100% - 40px);
-    bottom: 10px;
+    top: 10px;
     right: 10px;
   }
 }

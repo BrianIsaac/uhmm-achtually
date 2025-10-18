@@ -10,6 +10,44 @@ let transcriptItems = [];
 let overlayContainer = null;
 let transcriptList = null;
 
+// Make element draggable
+function makeDraggable(element) {
+  const header = element.querySelector('.uhmm-header');
+  let isDragging = false;
+  let currentX;
+  let currentY;
+  let initialX;
+  let initialY;
+
+  header.style.cursor = 'move';
+
+  header.addEventListener('mousedown', (e) => {
+    // Don't drag if clicking on minimize button
+    if (e.target.closest('.uhmm-minimize')) return;
+
+    isDragging = true;
+    initialX = e.clientX - element.offsetLeft;
+    initialY = e.clientY - element.offsetTop;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    e.preventDefault();
+    currentX = e.clientX - initialX;
+    currentY = e.clientY - initialY;
+
+    element.style.left = currentX + 'px';
+    element.style.top = currentY + 'px';
+    element.style.right = 'auto';
+    element.style.bottom = 'auto';
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+}
+
 // Create overlay UI
 function createOverlay() {
   if (overlayContainer) return;
@@ -39,6 +77,9 @@ function createOverlay() {
     overlayContainer.classList.toggle('minimized');
     minimizeBtn.textContent = overlayContainer.classList.contains('minimized') ? '+' : '−';
   });
+
+  // Make draggable
+  makeDraggable(overlayContainer);
 
   console.log('[UhmmActually] Overlay created');
 }
