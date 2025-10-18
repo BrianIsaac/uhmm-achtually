@@ -1,0 +1,72 @@
+# Development Configuration for Fact-Checker Bot
+# This file contains settings that can be modified without changing code
+
+# Pipeline Configuration
+# Use V2 pipeline with PydanticAI and Instructor (recommended)
+use_v2_pipeline: true
+
+# Voice Activity Detection Settings
+vad:
+  # Set to true to bypass VAD and send continuous audio to STT
+  disable: false
+
+  # start_secs: How long audio must contain speech before triggering (in seconds)
+  # stop_secs: How long silence must persist before ending speech segment (in seconds)
+  # min_volume: Minimum volume threshold (0.0 to 1.0)
+  #
+  # Optimized for low latency:
+  # - start_secs: 0.1 = faster speech detection
+  # - stop_secs: 0.8 = allows for natural pauses without cutting off
+  # - min_volume: 0.5 = more sensitive to quieter speech
+  start_secs: 0.1
+  stop_secs: 0.8
+  min_volume: 0.5
+
+# Continuous Audio Processing (only used when vad.disable=true)
+continuous_audio:
+  # How long to buffer audio before sending to STT (in seconds)
+  # Recommended: 2-3 seconds for natural speech segments
+  buffer_duration: 3
+
+  # Whether to overlap buffers to avoid cutting off words
+  # If true, buffers will overlap by 50% (e.g., 2.5s buffer with 1.25s overlap)
+  overlap: false
+
+# Speech-to-Text Settings
+stt:
+  # Provider: "groq" or "avalon"
+  # - groq: Whisper Large v3 Turbo (general purpose, fast)
+  # - avalon: AquaVoice (developer-optimized, 97.3% accuracy on technical terms, free until Oct 30 2025)
+  provider: "groq"
+
+  # Groq Whisper settings
+  groq:
+    model: "whisper-large-v3-turbo"
+    language: "en"
+
+  # AquaVoice Avalon settings
+  avalon:
+    model: "avalon-1"
+    language: "en"
+
+# LLM Settings (for claim extraction and verification)
+llm:
+  # Model for claim extraction
+  # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant
+  # Note: llama-3.3-70b-versatile works best with PydanticAI's function calling
+  claim_extraction_model: "llama-3.3-70b-versatile"
+
+  # Model for fact verification
+  # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant
+  verification_model: "llama-3.3-70b-versatile"
+
+  # Temperature for LLM calls (0.0-1.0, lower = more deterministic)
+  temperature: 0.1
+
+# Logging Settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Enable detailed transcription logging
+  log_transcriptions: true

@@ -1,0 +1,40 @@
+[project]
+name = "fact-checker-bot"
+version = "0.1.0"
+description = "Real-time meeting fact-checker with Pipecat and Daily.co"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "pipecat-ai[daily,silero]>=0.0.90",
+]
+
+[dependency-groups]
+llm = [
+    "groq>=0.8.0",
+    "pydantic-ai>=0.0.49",
+]
+
+search = [
+    "exa-py>=1.0.0",
+]
+
+stt = [
+    "openai>=1.0.0",  # For Avalon API compatibility
+]
+
+config = [
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "pyyaml>=6.0.0",
+]
+
+utils = [
+    "httpx>=0.27.0",
+    "websockets>=15.0.1",
+]
+
+dev = [
+    "ipython>=8.22.0",
+    "loguru>=0.7.0",
+]
