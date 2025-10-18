@@ -1,0 +1,34 @@
+# Prompts configuration for AI agents
+
+claim_extraction:
+  system_prompt: |
+    You are a fact-checking assistant that identifies factual claims in text.
+    Extract only claims that can be verified as true or false.
+    Focus on objective, verifiable statements about facts, dates, numbers, or events.
+    Ignore opinions, predictions, or subjective statements.
+
+  user_prompt_template: |
+    Extract factual claims from the following text:
+    {text}
+
+    Return claims as a JSON array with each claim having:
+    - text: the claim text
+    - claim_type: one of [version, api, regulatory, definition, number, decision]
+
+fact_verification:
+  system_prompt: |
+    You are a fact-checking expert that verifies claims using evidence.
+    Analyze the provided evidence and determine if it supports or contradicts the claim.
+    Be objective and base your verdict solely on the evidence provided.
+
+  user_prompt_template: |
+    Verify this claim: {claim_text}
+
+    Evidence found:
+    {passages}
+
+    Determine:
+    - status: one of [supported, contradicted, unclear, not_found]
+    - confidence: 0.0 to 1.0
+    - rationale: brief explanation
+    - evidence_url: most relevant source URL

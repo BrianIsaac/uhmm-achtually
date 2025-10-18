@@ -18,7 +18,7 @@ from src.core.fact_checking.verification_service import VerificationService
 from src.processors.claim_extractor import ClaimExtractor
 from src.processors.web_fact_checker import WebFactChecker
 from src.services.stt import GroqSTT
-from src.utils.config import get_settings
+from src.infrastructure.config import get_settings
 
 
 class WebSocketServer:

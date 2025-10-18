@@ -111,7 +111,8 @@ def load_dev_config() -> DevConfig:
     Raises:
         FileNotFoundError: If dev_config.yaml does not exist
     """
-    config_path = Path(__file__).parent.parent.parent / "dev_config.yaml"
+    # Path is now: backend/src/infrastructure/config/settings.py -> backend/dev_config.yaml
+    config_path = Path(__file__).parent.parent.parent.parent / "dev_config.yaml"
 
     if not config_path.exists():
         raise FileNotFoundError(f"dev_config.yaml not found at {config_path}")
@@ -157,7 +158,8 @@ def load_prompts() -> PromptsConfig:
     Raises:
         FileNotFoundError: If prompts.yaml does not exist
     """
-    config_path = Path(__file__).parent.parent / "config" / "prompts.yaml"
+    # Path is now: backend/src/infrastructure/config/settings.py -> backend/src/infrastructure/config/prompts.yaml
+    config_path = Path(__file__).parent / "prompts.yaml"
 
     if not config_path.exists():
         raise FileNotFoundError(f"prompts.yaml not found at {config_path}")

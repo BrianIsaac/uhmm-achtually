@@ -5,7 +5,7 @@ from typing import Optional
 from loguru import logger
 from pipecat.transports.daily.transport import DailyTransport
 
-from src.models.verdict_models import FactCheckVerdict
+from src.domain.models import FactCheckVerdict
 
 
 class FactCheckMessenger:

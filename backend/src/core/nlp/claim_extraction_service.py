@@ -4,7 +4,7 @@ from typing import List
 from loguru import logger
 
 from src.processors.claim_extractor import ClaimExtractor
-from src.models.claim_models import Claim
+from src.domain.models import Claim
 from src.domain.exceptions import ClaimExtractionError, GroqAPIError
 
 
