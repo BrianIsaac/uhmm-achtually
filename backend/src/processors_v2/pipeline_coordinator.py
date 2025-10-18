@@ -2,14 +2,16 @@
 
 import asyncio
 import logging
-from typing import List, Optional
-from pipecat.transports.daily.transport import DailyTransport
+from typing import List, Optional, TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from pipecat.transports.daily.transport import DailyTransport
 
 from src.models.claim_models import Claim
 from src.models.verdict_models import FactCheckVerdict
 from src.processors_v2.claim_extractor_v2 import ClaimExtractorV2
 from src.processors_v2.web_fact_checker_v2 import WebFactCheckerV2
-from src.processors_v2.fact_check_messenger_v2 import FactCheckMessengerV2
+from src.processors_v2.fact_check_messenger_v2 import FactCheckMessengerV2, NoOpMessenger
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +27,15 @@ class FactCheckPipeline:
         self,
         groq_api_key: str,
         exa_api_key: str,
-        daily_transport: DailyTransport,
+        daily_transport: Optional[Union["DailyTransport", None]] = None,
         allowed_domains: Optional[List[str]] = None,
     ):
-        """Initialize the pipeline with all components.
+        """Initialise the pipeline with all components.
 
         Args:
             groq_api_key: Groq API key for LLM operations
             exa_api_key: Exa API key for web search
-            daily_transport: DailyTransport for broadcasting
+            daily_transport: DailyTransport for broadcasting (None for Meeting BaaS)
             allowed_domains: Allowed domains for web search
         """
         self.claim_extractor = ClaimExtractorV2(groq_api_key)
@@ -42,14 +44,21 @@ class FactCheckPipeline:
             exa_api_key=exa_api_key,
             allowed_domains=allowed_domains,
         )
-        self.messenger = FactCheckMessengerV2(daily_transport)
+
+        # Use NoOpMessenger for Meeting BaaS (verdicts via TTS), FactCheckMessengerV2 for Daily.co
+        if daily_transport is None:
+            self.messenger = NoOpMessenger()
+            logger.info("Using NoOpMessenger (Meeting BaaS mode - verdicts via TTS)")
+        else:
+            self.messenger = FactCheckMessengerV2(daily_transport)
+            logger.info("Using FactCheckMessengerV2 (Daily.co mode - verdicts via app messages)")
 
         # Metrics
         self.sentences_processed = 0
         self.claims_extracted = 0
         self.verdicts_generated = 0
 
-        logger.info("FactCheckPipeline initialized with all components")
+        logger.info("FactCheckPipeline initialised with all components")
 
     async def process_sentence(self, sentence: str) -> List[FactCheckVerdict]:
         """Process a complete sentence through the entire pipeline.

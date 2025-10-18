@@ -1,12 +1,42 @@
 """FactCheckMessengerV2 for broadcasting verdicts to Daily.co participants."""
 
 import logging
-from typing import Optional
-from pipecat.transports.daily.transport import DailyTransport
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.transports.daily.transport import DailyTransport
 
 from src.models.verdict_models import FactCheckVerdict
 
 logger = logging.getLogger(__name__)
+
+
+class NoOpMessenger:
+    """No-op messenger for Meeting BaaS (uses TTS instead of app messages)."""
+
+    def __init__(self, bot_name: str = "Fact Checker Bot"):
+        """Initialise the no-op messenger.
+
+        Args:
+            bot_name: Bot display name (unused in Meeting BaaS)
+        """
+        self.bot_name = bot_name
+        logger.info(f"NoOpMessenger initialised (verdicts via TTS, not app messages)")
+
+    async def broadcast(self, verdict: FactCheckVerdict, participant_id: Optional[str] = None) -> bool:
+        """No-op broadcast (verdicts are spoken via TTS)."""
+        logger.debug(f"NoOpMessenger: skipping app message for {verdict.claim}")
+        return True
+
+    async def broadcast_error(self, error_message: str, claim: Optional[str] = None, participant_id: Optional[str] = None) -> bool:
+        """No-op broadcast error."""
+        logger.debug(f"NoOpMessenger: skipping error message: {error_message}")
+        return True
+
+    async def broadcast_status(self, status: str, details: Optional[dict] = None, participant_id: Optional[str] = None) -> bool:
+        """No-op broadcast status."""
+        logger.debug(f"NoOpMessenger: skipping status: {status}")
+        return True
 
 
 class FactCheckMessengerV2:
@@ -18,10 +48,10 @@ class FactCheckMessengerV2:
 
     def __init__(
         self,
-        transport: DailyTransport,
+        transport: "DailyTransport",
         bot_name: str = "Fact Checker Bot",
     ):
-        """Initialize the messenger.
+        """Initialise the messenger.
 
         Args:
             transport: DailyTransport instance for sending messages
@@ -30,7 +60,7 @@ class FactCheckMessengerV2:
         self.transport = transport
         self.bot_name = bot_name
 
-        logger.info(f"FactCheckMessengerV2 initialized with bot name: {bot_name}")
+        logger.info(f"FactCheckMessengerV2 initialised with bot name: {bot_name}")
 
     async def broadcast(
         self,
