@@ -31,6 +31,8 @@ from src.processors.claim_extractor import ClaimExtractor
 from src.processors.web_fact_checker import WebFactChecker
 from src.processors.fact_check_messenger import FactCheckMessenger
 from src.processors.continuous_audio_aggregator import ContinuousAudioAggregator
+# V2 pipeline bridge
+from src.processors_v2.pipeline_bridge import PipelineBridge
 
 # Load environment variables
 load_dotenv()
@@ -129,27 +131,54 @@ async def main():
         # Stage 3: SentenceAggregator
         aggregator = SentenceAggregator()
 
-        # Stage 4: ClaimExtractor
-        claim_extractor = ClaimExtractor(groq_api_key=settings.groq_api_key)
+        # Use V2 Pipeline if enabled (default: True)
+        use_v2_pipeline = getattr(dev_config, "use_v2_pipeline", True)
 
-        # Stage 5: WebFactChecker
-        if settings.exa_api_key:
-            fact_checker = WebFactChecker(
-                exa_api_key=settings.exa_api_key,
+        if use_v2_pipeline and settings.exa_api_key:
+            # Use new V2 pipeline with PydanticAI and Instructor
+            logger.info("Using V2 Pipeline with PydanticAI and Instructor")
+
+            pipeline_bridge = PipelineBridge(
                 groq_api_key=settings.groq_api_key,
+                exa_api_key=settings.exa_api_key,
+                daily_transport=transport,
                 allowed_domains=settings.allowed_domains_list
             )
-            logger.info("Exa fact-checking enabled")
-        else:
-            logger.warning("EXA_API_KEY not found - fact-checking disabled")
-            fact_checker = None
 
-        # Stage 6: FactCheckMessenger (reuses DailyTransport)
-        if fact_checker:
-            messenger = FactCheckMessenger(transport=transport)
-            logger.info("App message broadcasting enabled")
-        else:
+            # For V2, we only need the bridge after aggregator
+            claim_extractor = None
+            fact_checker = None
             messenger = None
+
+            logger.info("V2 Pipeline bridge enabled - using modern async processing")
+
+        else:
+            # Use original pipeline (fallback)
+            logger.info("Using original Pipecat pipeline")
+
+            # Stage 4: ClaimExtractor
+            claim_extractor = ClaimExtractor(groq_api_key=settings.groq_api_key)
+
+            # Stage 5: WebFactChecker
+            if settings.exa_api_key:
+                fact_checker = WebFactChecker(
+                    exa_api_key=settings.exa_api_key,
+                    groq_api_key=settings.groq_api_key,
+                    allowed_domains=settings.allowed_domains_list
+                )
+                logger.info("Exa fact-checking enabled")
+            else:
+                logger.warning("EXA_API_KEY not found - fact-checking disabled")
+                fact_checker = None
+
+            # Stage 6: FactCheckMessenger (reuses DailyTransport)
+            if fact_checker:
+                messenger = FactCheckMessenger(transport=transport)
+                logger.info("App message broadcasting enabled")
+            else:
+                messenger = None
+
+            pipeline_bridge = None
 
         # Build pipeline (conditionally include Stages 4-6)
         pipeline_stages = [
@@ -167,14 +196,20 @@ async def main():
 
         pipeline_stages.append(aggregator)
 
-        if claim_extractor:
-            pipeline_stages.append(claim_extractor)
+        # Add either V2 bridge or original processors
+        if pipeline_bridge:
+            # V2 Pipeline: SentenceAggregator -> PipelineBridge
+            pipeline_stages.append(pipeline_bridge)
+        else:
+            # Original Pipeline: SentenceAggregator -> ClaimExtractor -> WebFactChecker -> Messenger
+            if claim_extractor:
+                pipeline_stages.append(claim_extractor)
 
-        if fact_checker:
-            pipeline_stages.append(fact_checker)
+            if fact_checker:
+                pipeline_stages.append(fact_checker)
 
-        if messenger:
-            pipeline_stages.append(messenger)
+            if messenger:
+                pipeline_stages.append(messenger)
 
         pipeline_stages.append(transport.output())
 

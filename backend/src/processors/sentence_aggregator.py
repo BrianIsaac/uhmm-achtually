@@ -32,7 +32,10 @@ class SentenceAggregator(FrameProcessor):
             frame: Input frame from upstream processor
             direction: Frame direction (upstream/downstream)
         """
-        # Only process TranscriptionFrame
+        # DEBUG: Log all incoming frames
+        logger.debug(f"🔍 SentenceAggregator received: {type(frame).__name__}")
+        
+        # We only want to aggregate TranscriptionFrames
         if isinstance(frame, TranscriptionFrame):
             # Add to buffer
             self._buffer += " " + frame.text
@@ -44,16 +47,23 @@ class SentenceAggregator(FrameProcessor):
             if self._is_sentence_complete(self._buffer):
                 logger.info(f"Complete sentence detected: {self._buffer}")
 
-                # Emit TextFrame for downstream processing
-                await self.push_frame(
-                    TextFrame(text=self._buffer),
-                    direction
-                )
+                # Create TextFrame for downstream processing
+                text_frame = TextFrame(text=self._buffer)
 
                 # Clear buffer
                 self._buffer = ""
 
-        # Always forward all frames to next processor
+                # Push TextFrame to next processor (PipelineBridge in V2)
+                # Use super().process_frame() to forward the frame properly
+                logger.info(f"📤 Pushing TextFrame to next processor: {text_frame.text}")
+                await super().process_frame(text_frame, direction)
+                logger.info(f"✅ TextFrame pushed successfully")
+
+            # IMPORTANT: Consume the TranscriptionFrame
+            # Return here so the original TranscriptionFrame is NOT forwarded
+            return
+
+        # Forward all other frames (like StartFrame, EndFrame, etc.) to next processor
         await super().process_frame(frame, direction)
 
     def _is_sentence_complete(self, text: str) -> bool:

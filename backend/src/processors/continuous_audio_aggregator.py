@@ -139,15 +139,14 @@ class ContinuousAudioAggregator(FrameProcessor):
                             text=transcription.text,
                             user_id="",
                             timestamp=frame.timestamp if hasattr(frame, 'timestamp') else ""
-                        ),
-                        direction
+                        )
                     )
                 else:
                     logger.debug("Empty transcription received")
 
             except Exception as e:
                 logger.error(f"STT error: {e}")
-                await self.push_frame(ErrorFrame(f"STT transcription failed: {e}"), direction)
+                await self.push_frame(ErrorFrame(f"STT transcription failed: {e}"))
 
     def _create_wav(self, pcm_data: bytes) -> bytes:
         """Create a WAV file from PCM audio data.

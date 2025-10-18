@@ -77,7 +77,7 @@ Never fabricate information.
             cache_key = f"claim:{claim}"
             if cache_key in self._cache:
                 logger.info(f"Cache hit: {claim}")
-                await self.push_frame(self._cache[cache_key], direction)
+                await self.push_frame(self._cache[cache_key])
                 return
 
             try:
@@ -118,7 +118,7 @@ Never fabricate information.
                 self._cache[cache_key] = verdict
                 logger.info(f"Verdict: {verdict.status} (confidence: {verdict.confidence:.2f})")
 
-                await self.push_frame(verdict, direction)
+                await self.push_frame(verdict)
 
             except Exception as e:
                 logger.error(f"Fact-checking failed: {e}", exc_info=True)

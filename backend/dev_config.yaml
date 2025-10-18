@@ -1,6 +1,10 @@
 # Development Configuration for Fact-Checker Bot
 # This file contains settings that can be modified without changing code
 
+# Pipeline Configuration
+# Use V2 pipeline with PydanticAI and Instructor (recommended)
+use_v2_pipeline: true
+
 # Voice Activity Detection Settings
 vad:
   # Set to true to bypass VAD and send continuous audio to STT
@@ -49,7 +53,8 @@ stt:
 llm:
   # Model for claim extraction
   # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant
-  claim_extraction_model: "llama-3.1-8b-instant"
+  # Note: llama-3.3-70b-versatile works best with PydanticAI's function calling
+  claim_extraction_model: "llama-3.3-70b-versatile"
 
   # Model for fact verification
   # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant

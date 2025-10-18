@@ -52,6 +52,9 @@ class ClaimExtractor(FrameProcessor):
             frame: Incoming frame
             direction: Frame direction (upstream/downstream)
         """
+        # DEBUG: Log ALL frames received to diagnose pipeline flow
+        logger.warning(f"🔍 ClaimExtractor received frame: {type(frame).__name__}")
+
         # Only process TextFrame
         if isinstance(frame, TextFrame):
             sentence = frame.text
@@ -83,7 +86,7 @@ class ClaimExtractor(FrameProcessor):
                         claim_type=claim["type"]
                     )
                     logger.info(f"Claim: {claim_frame.text} ({claim_frame.claim_type})")
-                    await self.push_frame(claim_frame, direction)
+                    await self.push_frame(claim_frame)
 
             except Exception as e:
                 logger.error(f"Claim extraction failed: {e}", exc_info=True)
