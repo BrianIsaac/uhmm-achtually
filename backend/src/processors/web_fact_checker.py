@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List, Literal, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic_ai import Agent
 
 from src.domain.models import Claim, FactCheckVerdict
@@ -135,8 +135,32 @@ class WebFactChecker:
 
             return verdict
 
+        except ValidationError as e:
+            logger.error(f"Pydantic validation error during fact-checking for '{claim_text}': {e!r}")
+            logger.error(f"Validation errors: {e.errors()}")
+            logger.error(f"Full traceback:", exc_info=True)
+            # Return a safe default verdict on validation error
+            return FactCheckVerdict(
+                claim=claim_text,
+                status="unclear",
+                confidence=0.0,
+                rationale=f"Fact-checking failed: invalid response format",
+                evidence_url=None,
+            )
+        except KeyError as e:
+            logger.error(f"KeyError during fact-checking for '{claim_text}' - missing key: {e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
+            # Return a safe default verdict on error
+            return FactCheckVerdict(
+                claim=claim_text,
+                status="unclear",
+                confidence=0.0,
+                rationale=f"Fact-checking failed: missing expected data field",
+                evidence_url=None,
+            )
         except Exception as e:
-            logger.error(f"Fact-checking failed for '{claim_text}': {e}", exc_info=True)
+            logger.error(f"Fact-checking failed for '{claim_text}': type={type(e).__name__}, error={e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
             # Return a safe default verdict on error
             return FactCheckVerdict(
                 claim=claim_text,
@@ -211,8 +235,18 @@ class WebFactChecker:
                 logger.error(f"Unexpected result format from PydanticAI: {type(result)}")
                 logger.error(f"Result attributes: {dir(result) if hasattr(result, '__dict__') else 'No attributes'}")
                 raise ValueError(f"Unexpected result format from PydanticAI agent: {type(result)}")
+        except ValidationError as e:
+            logger.error(f"Pydantic validation error in PydanticAI verification: {e!r}")
+            logger.error(f"Validation errors: {e.errors()}")
+            logger.error(f"Full traceback:", exc_info=True)
+            raise
+        except KeyError as e:
+            logger.error(f"KeyError in PydanticAI verification - missing key: {e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
+            raise
         except Exception as e:
-            logger.error(f"PydanticAI verification failed: {e}", exc_info=True)
+            logger.error(f"PydanticAI verification failed: type={type(e).__name__}, error={e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
             raise
 
         # Convert to FactCheckVerdict - handle Any types safely

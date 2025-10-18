@@ -56,6 +56,14 @@ class ClaimExtractionService:
                 "Failed to connect to Groq API",
                 {"text_length": len(text), "error_type": type(e).__name__}
             )
+        except KeyError as e:
+            # Specific handling for KeyError to get better diagnostics
+            logger.error(f"KeyError during claim extraction - missing key: {e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
+            raise ClaimExtractionError(
+                "Missing expected key in response",
+                {"text_preview": text[:100], "missing_key": str(e), "error_type": "KeyError"}
+            )
         except ValueError as e:
             # Invalid response or parsing error
             logger.error(f"Invalid response during claim extraction: {e}")
@@ -64,8 +72,9 @@ class ClaimExtractionService:
                 {"text_preview": text[:100], "error": str(e)}
             )
         except Exception as e:
-            # Unexpected errors
-            logger.error(f"Unexpected error extracting claims: {e}", exc_info=True)
+            # Unexpected errors - log the repr for better error visibility
+            logger.error(f"Unexpected error extracting claims: type={type(e).__name__}, error={e!r}")
+            logger.error(f"Full traceback:", exc_info=True)
             raise ClaimExtractionError(
                 "Failed to extract claims from text",
                 {"text_length": len(text), "error": str(e), "error_type": type(e).__name__}

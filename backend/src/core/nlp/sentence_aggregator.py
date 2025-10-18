@@ -16,7 +16,10 @@ class SentenceAggregator:
     def __init__(self):
         """Initialize the sentence aggregator."""
         self._buffer = ""
-        self._sentence_pattern = re.compile(r'[.!?]\s*')
+        # Improved pattern that avoids splitting on decimal points
+        # Matches: period not preceded by digit and followed by space, or ! or ?
+        # This prevents splitting on decimal numbers like 3.16
+        self._sentence_pattern = re.compile(r'(?<![0-9])\.(?=\s)|[!?](?=\s|$)')
 
     def add_text(self, text: str) -> List[str]:
         """
@@ -53,25 +56,27 @@ class SentenceAggregator:
         """
         sentences = []
 
-        # Find all sentence boundaries
-        matches = list(self._sentence_pattern.finditer(self._buffer))
+        # Special handling for numbers with decimal points
+        # Don't split on periods that are between digits
+        protected_buffer = self._buffer
 
-        if not matches:
+        # Find sentence-ending punctuation that's not a decimal point
+        # Split on: '. ' (period + space), '! ', '? ', or these at end of string
+        parts = re.split(r'(?<=[.!?])\s+', protected_buffer)
+
+        if len(parts) == 1:
+            # No complete sentence found yet
             return sentences
 
-        # Extract complete sentences
-        last_end = 0
-        for match in matches:
-            sentence = self._buffer[last_end:match.end()].strip()
-            if sentence:
-                sentences.append(sentence)
-            last_end = match.end()
+        # All parts except the last are complete sentences
+        for i, part in enumerate(parts[:-1]):
+            # Don't treat decimal numbers as sentence endings
+            # Check if this looks like a complete sentence
+            if part and not re.match(r'^\d+$', part.rstrip('.')):
+                sentences.append(part)
 
-        # Update buffer with remaining text
-        if last_end < len(self._buffer):
-            self._buffer = self._buffer[last_end:].strip()
-        else:
-            self._buffer = ""
+        # Keep the last part in the buffer (incomplete sentence)
+        self._buffer = parts[-1] if parts[-1] else ""
 
         return sentences
 
