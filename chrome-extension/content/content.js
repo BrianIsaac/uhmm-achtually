@@ -165,7 +165,7 @@ function renderTranscript() {
         <div class="uhmm-verdict-header">
           <span class="uhmm-verdict-icon">${statusIcons[item.verdict.status]}</span>
           <span class="uhmm-verdict-label">${statusLabels[item.verdict.status]}</span>
-          ${item.verdict.confidence ? `<span class="uhmm-verdict-confidence">${Math.round(item.verdict.confidence * 100)}%</span>` : ''}
+          ${item.verdict.confidence !== undefined && item.verdict.confidence !== null ? `<span class="uhmm-verdict-confidence">Confidence: ${Math.round(item.verdict.confidence * 100)}%</span>` : ''}
         </div>
         <div class="uhmm-verdict-rationale">${item.verdict.rationale}</div>
         ${item.verdict.evidenceUrl ? `<a href="${item.verdict.evidenceUrl}" target="_blank" class="uhmm-verdict-link">🔗 View Source</a>` : ''}
