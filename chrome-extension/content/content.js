@@ -12,6 +12,13 @@ let speechBubble = null;
 let currentTimeout = null;
 let isConnected = false;
 
+// Drag state
+let isDragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let mascotStartX = 0;
+let mascotStartY = 0;
+
 // Create mascot UI
 function createMascot() {
   if (mascotContainer) return;
@@ -57,8 +64,13 @@ function createMascot() {
   // Add to page
   document.body.appendChild(mascotContainer);
 
-  // Add click handler to mascot for toggling speech bubble
-  mascotImage.addEventListener('click', toggleSpeechBubble);
+  // Load saved position or use default
+  loadMascotPosition();
+
+  // Add drag handlers to mascot
+  mascotImage.addEventListener('mousedown', startDrag);
+  document.addEventListener('mousemove', drag);
+  document.addEventListener('mouseup', endDrag);
 
   // Add close button handler
   const closeBtn = speechBubble.querySelector('.uhmm-bubble-close');
@@ -206,6 +218,97 @@ function updateConnectionStatus(connected) {
       mascotImage.style.animation = '';
     }, 500);
   }
+}
+
+// Drag functionality
+function startDrag(e) {
+  if (e.button !== 0) return; // Only left mouse button
+
+  isDragging = true;
+  mascotImage.classList.add('dragging');
+
+  // Record starting positions
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+
+  // Get current mascot position
+  const rect = mascotContainer.getBoundingClientRect();
+  mascotStartX = rect.left;
+  mascotStartY = rect.top;
+
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function drag(e) {
+  if (!isDragging) return;
+
+  // Calculate new position
+  const deltaX = e.clientX - dragStartX;
+  const deltaY = e.clientY - dragStartY;
+
+  let newX = mascotStartX + deltaX;
+  let newY = mascotStartY + deltaY;
+
+  // Keep mascot within viewport bounds
+  const maxX = window.innerWidth - mascotContainer.offsetWidth;
+  const maxY = window.innerHeight - mascotContainer.offsetHeight;
+
+  newX = Math.max(0, Math.min(newX, maxX));
+  newY = Math.max(0, Math.min(newY, maxY));
+
+  // Update position
+  mascotContainer.style.left = `${newX}px`;
+  mascotContainer.style.top = `${newY}px`;
+  mascotContainer.style.right = 'auto';
+  mascotContainer.style.bottom = 'auto';
+
+  e.preventDefault();
+}
+
+function endDrag(e) {
+  if (!isDragging) return;
+
+  isDragging = false;
+  mascotImage.classList.remove('dragging');
+
+  // Save position to localStorage
+  saveMascotPosition();
+
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+// Save mascot position to localStorage
+function saveMascotPosition() {
+  const rect = mascotContainer.getBoundingClientRect();
+  const position = {
+    left: rect.left,
+    top: rect.top
+  };
+  chrome.storage.local.set({ mascotPosition: position });
+}
+
+// Load mascot position from localStorage
+function loadMascotPosition() {
+  chrome.storage.local.get(['mascotPosition'], (result) => {
+    if (result.mascotPosition) {
+      const pos = result.mascotPosition;
+
+      // Ensure position is within current viewport
+      const maxX = window.innerWidth - mascotContainer.offsetWidth;
+      const maxY = window.innerHeight - mascotContainer.offsetHeight;
+
+      const x = Math.max(0, Math.min(pos.left, maxX));
+      const y = Math.max(0, Math.min(pos.top, maxY));
+
+      mascotContainer.style.left = `${x}px`;
+      mascotContainer.style.top = `${y}px`;
+      mascotContainer.style.right = 'auto';
+      mascotContainer.style.bottom = 'auto';
+    }
+    // Otherwise use default CSS positioning (bottom-right)
+  });
 }
 
 // Listen for messages from background script

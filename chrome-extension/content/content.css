@@ -18,17 +18,26 @@
 
 /* Mascot Image */
 .uhmm-mascot-image {
-  width: 120px;
-  height: 120px;
-  cursor: pointer;
+  width: 160px;
+  height: 160px;
+  cursor: grab;
   pointer-events: auto;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
   transition: transform 0.3s ease;
   animation: float 3s ease-in-out infinite;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .uhmm-mascot-image:hover {
   transform: scale(1.05);
+}
+
+.uhmm-mascot-image.dragging {
+  cursor: grabbing;
+  animation: none;
+  transform: scale(1.1);
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
 }
 
 .uhmm-mascot-image.talking {
