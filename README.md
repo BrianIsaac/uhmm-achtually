@@ -1,31 +1,35 @@
 # Uhmm Achtually - Real-time AI Fact Checker
 
-A real-time fact-checking system that listens to voice conversations, extracts factual claims, and verifies them using web search and AI. Built with Python, PydanticAI, and Pipecat for voice processing.
+A real-time fact-checking system that monitors conversations in video meetings and YouTube, extracts factual claims, and verifies them using AI and web search. Features an animated mascot that alerts you when questionable claims are detected.
 
 ## Features
 
-- **Real-time Voice Processing**: Captures voice input via Daily.co
+- **Real-time Audio Monitoring**: Captures system audio from Zoom, Google Meet, Teams, and YouTube
 - **Automatic Claim Extraction**: Uses AI to identify factual claims in conversations
 - **Web-based Verification**: Searches trusted sources to verify claims
 - **Confidence Scoring**: Provides confidence levels for each verdict
+- **Chrome Extension**: Animated mascot with speech bubbles for visual fact-check alerts
 - **Fast Response**: Sub-500ms search latency for quick fact-checking
 
 ## Architecture
 
 ```
-Voice Input (Daily.co) → STT (Groq) → Claim Extraction → Web Search (Exa) → Verification (Groq) → Results
-                ↓
-        System Audio → WebSocket Server → Chrome Extension
+System Audio → WebSocket Server (FastAPI) → STT (Groq) → Claim Extraction (PydanticAI)
+                       ↓                            ↓
+                Chrome Extension ← WebSocket ← Web Search (Exa) → Verification (Groq)
+                       ↓
+                 Mascot UI (alerts on false/unclear claims)
 ```
 
 ### Core Components
 
-1. **Voice Input**: Daily.co transport for real-time audio capture
-2. **Speech-to-Text**: Groq STT with Whisper model
-3. **Claim Extraction**: PydanticAI agent to identify factual claims
-4. **Web Search**: Exa API for fast neural/keyword search
-5. **Verification**: PydanticAI agent to analyze evidence and generate verdicts
-6. **WebSocket Server**: FastAPI server with clean architecture and dependency injection
+1. **Audio Capture**: System audio monitoring using sounddevice for real-time capture
+2. **WebSocket Server**: FastAPI server with clean architecture and dependency injection
+3. **Speech-to-Text**: Groq STT with Whisper model
+4. **Claim Extraction**: PydanticAI agent to identify factual claims
+5. **Web Search**: Exa API for fast neural/keyword search
+6. **Verification**: PydanticAI agent to analyse evidence and generate verdicts
+7. **Chrome Extension**: Animated mascot UI with speech bubbles for visual alerts
 
 ### Architecture Principles
 
@@ -39,49 +43,33 @@ The WebSocket server follows clean architecture principles:
 
 ```
 uhmm-achtually/
-├── backend/
-│   ├── main.py                          # Main entry point for WebSocket server
-│   ├── bot.py                          # Daily.co voice-enabled fact checker
-│   ├── test_websocket_client.py        # WebSocket test client
-│   ├── run_websocket_server.sh         # Server startup script
+├── backend/                            # Python backend server
+│   ├── main.py                         # Main entry point for WebSocket server
 │   ├── src/
-│   │   ├── api/                        # API layer
-│   │   │   ├── websocket/
-│   │   │   │   ├── server.py           # WebSocket server with DI
-│   │   │   │   ├── connection_manager.py # Connection management
-│   │   │   │   ├── handlers.py         # Message handlers
-│   │   │   │   └── messages.py         # Message factory
-│   │   │   └── http/
-│   │   │       └── endpoints.py        # REST API endpoints
-│   │   ├── core/                       # Business logic
-│   │   │   ├── fact_checking/
-│   │   │   │   ├── orchestrator.py     # Pipeline orchestration
-│   │   │   │   └── verification_service.py # Claim verification
-│   │   │   ├── nlp/
-│   │   │   │   ├── sentence_aggregator.py # Text processing
-│   │   │   │   └── claim_extraction_service.py # Claim extraction
-│   │   │   └── transcription/
-│   │   │       └── service.py          # Audio transcription
-│   │   ├── models/
-│   │   │   ├── claim_models.py         # Pydantic models for claims
-│   │   │   └── verdict_models.py       # Pydantic models for verdicts
-│   │   ├── processors/
-│   │   │   ├── audio_stream_processor.py # Audio capture
-│   │   │   ├── claim_extractor.py      # PydanticAI claim extraction
-│   │   │   └── web_fact_checker.py     # Web-based verification
-│   │   ├── services/
-│   │   │   ├── exa_client.py           # Exa search API
-│   │   │   └── stt/
-│   │   │       ├── groq_stt.py         # Groq STT service
-│   │   │       └── avalon_stt.py       # Avalon STT service
-│   │   └── utils/
-│   │       └── config.py               # Configuration
-│   ├── config/
-│   │   └── prompts.yaml                # AI agent prompts
-│   ├── dev_config.yaml                 # Development configuration
-│   └── .env                             # Environment variables
-├── cursor-hackathon/
-│   └── WEBSOCKET_API_SPEC.md           # WebSocket API specification
+│   │   ├── api/                        # API layer (WebSocket + HTTP)
+│   │   ├── core/                       # Business logic (fact-checking, NLP, transcription)
+│   │   ├── domain/                     # Domain models and interfaces
+│   │   ├── infrastructure/             # External clients (Groq, Exa)
+│   │   └── processors/                 # Audio processing and claim extraction
+│   ├── pyproject.toml                  # Python dependencies (uv)
+│   └── .env                            # Environment variables (API keys)
+│
+├── chrome-extension/                   # Chrome extension for visual alerts
+│   ├── manifest.json                   # Extension configuration
+│   ├── background/
+│   │   └── background.js               # WebSocket client & service worker
+│   ├── content/
+│   │   ├── content.js                  # Mascot UI logic
+│   │   └── content.css                 # Mascot styling & animations
+│   ├── popup/
+│   │   ├── popup.html                  # Extension popup UI
+│   │   ├── popup.js                    # Popup logic & settings
+│   │   └── popup.css                   # Popup styling
+│   ├── assets/
+│   │   ├── thinking-pose.png           # Mascot default state
+│   │   └── talking-pose.png            # Mascot alert state
+│   └── icons/                          # Extension icons
+│
 └── README.md
 ```
 
@@ -89,11 +77,11 @@ uhmm-achtually/
 
 ### Prerequisites
 
-- Python 3.12+
-- Groq API key for STT and LLM
-- Exa API key for web search
-- (Optional) Daily.co account - only needed for `bot.py` (remote meetings)
-- (Optional) Avalon API key for alternative STT
+- **Python 3.12+**
+- **Google Chrome** browser
+- **API Keys:**
+  - [Groq API key](https://console.groq.com/) for STT and LLM (required)
+  - [Exa API key](https://exa.ai/) for web search (required)
 
 ### Installation
 
@@ -108,150 +96,148 @@ cd uhmm-achtually
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-3. Create and activate virtual environment:
+3. Navigate to backend and install dependencies:
 ```bash
 cd backend
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv sync --all-groups
 ```
 
-4. Install dependencies:
-```bash
-# For WebSocket server (Chrome extension support)
-uv pip install -e ".[llm,search,stt,config,utils,websocket,dev]"
+4. Configure environment variables:
 
-# For Daily.co bot (remote meetings) - requires additional pipecat dependencies
-uv pip install -e ".[llm,search,stt,config,utils,dev]"
-uv pip install "pipecat-ai[daily,silero]>=0.0.90"
+   Create a `.env` file in the `backend` directory with your API keys:
+   ```env
+   # Required
+   GROQ_API_KEY=your_groq_api_key_here
+   EXA_API_KEY=your_exa_api_key_here
+
+   # Optional - Customise trusted search domains
+   ALLOWED_DOMAINS=stackoverflow.com,github.com,python.org,reactjs.org
+   ```
+
+5. Start the backend server:
+   ```bash
+   uv run python main.py
+   ```
+
+   The server will start on `ws://localhost:8765` and begin capturing system audio.
+
+## Chrome Extension Setup
+
+### Installation
+
+1. **Open Chrome Extensions page:**
+   - Navigate to `chrome://extensions/` in your Chrome browser
+   - Enable **Developer mode** (toggle in top-right corner)
+
+2. **Load the extension:**
+   - Click **"Load unpacked"**
+   - Select the `chrome-extension` folder from this repository
+
+3. **Verify installation:**
+   - You should see "Uhmm Actually - AI Fact Checker" in your extensions list
+   - The extension icon should appear in your Chrome toolbar
+
+4. **Check connection status:**
+   - Click the extension icon to open the popup
+   - Verify it shows "Connected" (green indicator)
+   - If disconnected, make sure the backend server is running
+
+### Using the Mascot
+
+Once both the backend server and Chrome extension are running:
+
+1. **Navigate to a supported platform:**
+   - **Zoom** (zoom.us)
+   - **Google Meet** (meet.google.com)
+   - **Microsoft Teams** (teams.microsoft.com)
+   - **YouTube** (youtube.com)
+
+2. **The mascot will appear:**
+   - An animated character appears in the bottom-right corner
+   - Green dot indicates active WebSocket connection
+   - You can drag and drop the mascot to reposition it
+
+3. **When false or unclear claims are detected:**
+   - The mascot switches to "talking" pose
+   - A speech bubble appears with the verdict
+   - Shows confidence percentage, rationale, and evidence link
+   - Bubble auto-hides after 10 seconds
+
+4. **Verdict types:**
+   - **Contradicted** (red bubble): Claim is false or contradicted by evidence
+   - **Unclear** (yellow bubble): Insufficient evidence to verify
+   - **Supported**: No alert shown (claim is true)
+   - **Not Found**: No claims detected in the conversation
+
+### Mascot Features
+
+- **Drag & Drop**: Click and drag to reposition the mascot anywhere on the page
+- **Persistent Position**: Your chosen position is saved in browser storage
+- **Floating Animation**: Gentle bobbing motion when idle
+- **Connection Status**: Green dot when connected, yellow when disconnected
+- **Responsive Design**: Adapts to different screen sizes
+
+## Usage Examples
+
+### Backend Console Output
+
+When the backend is running, you'll see real-time processing in the terminal:
+
+```
+INFO:     Started server process
+INFO:     Uvicorn running on http://localhost:8765
+INFO:     WebSocket connection established
+INFO:     Transcribing: "Python 3.12 removed the distutils package"
+INFO:     Extracting claims from transcript
+INFO:     Found 1 claim: Python 3.12 removed the distutils package
+INFO:     Searching for evidence...
+INFO:     Verdict: supported (95% confidence)
+INFO:     Sent verdict to Chrome extension
 ```
 
-5. Configure environment variables:
-```bash
-cp .env.example .env
-```
+### Chrome Extension Experience
 
-Edit `.env` with your API keys:
-```env
-# Required APIs
-GROQ_API_KEY=your_groq_api_key
-EXA_API_KEY=your_exa_api_key
+When someone makes a false claim in a meeting:
 
-# Optional - Only needed for bot.py (Daily.co meetings)
-DAILY_API_KEY=your_daily_api_key
-DAILY_ROOM_URL=https://your-domain.daily.co/your-room
-DAILY_BOT_TOKEN=optional_bot_token
-
-# Optional - Alternative STT provider
-AVALON_API_KEY=optional_avalon_key
-
-# Configuration
-ALLOWED_DOMAINS=docs.python.org,kubernetes.io,owasp.org,nist.gov,postgresql.org
-PYTHON_ENV=development
-LOG_LEVEL=INFO
-```
-
-## Usage
-
-### Running the Bot (Daily.co Voice Input)
-
-```bash
-cd backend
-uv run bot.py
-```
-
-The bot will:
-1. Join the Daily.co room specified in DAILY_ROOM_URL
-2. Listen for voice input
-3. Process speech and extract claims
-4. Fact-check claims in real-time
-5. Log results to the console
-
-### Running the WebSocket Server (For Chrome Extension)
-
-```bash
-cd backend
-./run_websocket_server.sh
-```
-
-Or manually:
-```bash
-uvicorn main:app --host localhost --port 8765 --reload
-```
-
-The WebSocket server will:
-1. Start on `ws://localhost:8765`
-2. Capture system audio
-3. Transcribe speech in real-time
-4. Extract and verify claims
-5. Send transcripts and verdicts to connected Chrome extension
-
-### Testing the WebSocket Server
-
-```bash
-python backend/test_websocket_client.py
-```
-
-This will send test transcripts and display the fact-checking results.
-
-### Example Output
-
-```
-========================================================================
-VOICE-ENABLED PYDANTIC-AI FACT-CHECKER
-Listening for voice input -> Processing with PydanticAI
-========================================================================
-Joining room: https://your-domain.daily.co/your-room
-Ready to listen! Speak into your microphone...
-
-VOICE INPUT: Python 3.12 removed the distutils package.
-Complete sentence: Python 3.12 removed the distutils package.
-============================================================
-PROCESSING: Python 3.12 removed the distutils package.
-============================================================
-Extracting claims with PydanticAI...
-Found 1 claim(s)
-   - Python 3.12 removed the distutils package (type: software)
-
-Fact-checking with PydanticAI...
-Claim 1: Python 3.12 removed the distutils package
-   Status: supported
-   Confidence: 95.00%
-   Rationale: Python 3.12 officially removed the distutils package as part of PEP 632.
-   Evidence: https://docs.python.org/3.12/whatsnew/3.12.html
-============================================================
-```
+1. **Audio captured**: System picks up the conversation
+2. **Claim detected**: AI identifies a factual claim
+3. **Evidence gathered**: Searches trusted sources
+4. **Verdict delivered**:
+   - Mascot animates to "talking" pose
+   - Speech bubble appears with verdict
+   - Red bubble: "This claim is contradicted by evidence"
+   - Shows 85% confidence with link to source
 
 ## Configuration
 
-### dev_config.yaml
+### Configuration File
+
+Edit `backend/dev_config.yaml` to customise system behaviour:
 
 ```yaml
-# VAD (Voice Activity Detection)
+# Voice Activity Detection (optimised for low latency)
 vad:
-  disable: false
-  start_secs: 0.2
-  stop_secs: 0.2
-  min_volume: 0.6
+  disable: false         # Set true to bypass VAD
+  start_secs: 0.1       # Faster speech detection
+  stop_secs: 0.8        # Natural pause tolerance
+  min_volume: 0.5       # Sensitivity threshold (0.0-1.0)
 
-# Speech-to-Text
+# Speech-to-Text Provider
 stt:
-  provider: groq  # or avalon
+  provider: "groq"      # Options: "groq" or "avalon"
   groq:
-    model: whisper-large-v3-turbo
-    language: en
-  avalon:
-    model: avalon-1
-    language: en
+    model: "whisper-large-v3"
+    language: "en"
 
-# LLM Configuration
+# LLM Models (Groq)
 llm:
-  claim_extraction_model: llama-3.3-70b-versatile
-  verification_model: llama-3.3-70b-versatile
-  temperature: 0.1
+  claim_extraction_model: "llama-3.3-70b-versatile"
+  verification_model: "llama-3.3-70b-versatile"
+  temperature: 0.1      # Lower = more deterministic (0.0-1.0)
 
 # Logging
 logging:
-  level: INFO
+  level: "INFO"         # DEBUG, INFO, WARNING, ERROR
   log_transcriptions: true
 ```
 
@@ -260,12 +246,12 @@ logging:
 The system supports two STT providers:
 
 1. **Groq STT** (default) - Fast, reliable Whisper-based transcription
-2. **Avalon STT** - Alternative provider with developer-optimized transcription
+2. **Avalon STT** - AquaVoice, 97.3% accuracy on technical terms
 
-To switch providers, modify `dev_config.yaml`:
+To switch providers, edit `backend/dev_config.yaml`:
 ```yaml
 stt:
-  provider: avalon  # Switch from 'groq' to 'avalon'
+  provider: "avalon"  # Switch from "groq" to "avalon"
 ```
 
 ### Allowed Domains
@@ -276,6 +262,43 @@ The fact-checker searches only trusted domains specified in ALLOWED_DOMAINS. Def
 - owasp.org (Security best practices)
 - nist.gov (Standards and guidelines)
 - postgresql.org (PostgreSQL documentation)
+
+## Troubleshooting
+
+### Backend Issues
+
+**Server won't start:**
+- Ensure you're in the `backend` directory
+- Check Python version: `python --version` (must be 3.12+)
+- Verify dependencies: `uv sync --all-groups`
+- Check port 8765 isn't already in use: `lsof -i :8765`
+
+**API errors:**
+- Verify API keys in `.env` file
+- Check API key validity at [Groq Console](https://console.groq.com/) and [Exa Dashboard](https://exa.ai/)
+- Ensure no extra spaces or quotes around API keys
+
+**No audio being captured:**
+- Check system audio permissions for the terminal/Python
+- Verify sounddevice is properly installed: `uv run python -c "import sounddevice; print(sounddevice.query_devices())"`
+- On macOS: Grant microphone access in System Preferences → Security & Privacy
+
+### Chrome Extension Issues
+
+**Extension not connecting:**
+- Ensure backend server is running on `ws://localhost:8765`
+- Check browser console for WebSocket errors (F12 → Console)
+- Click extension icon and try "Reconnect" button
+
+**Mascot not appearing:**
+- Verify you're on a supported platform (Zoom, Meet, Teams, YouTube)
+- Check extension is enabled at `chrome://extensions/`
+- Reload the page after starting the backend
+
+**No verdicts showing:**
+- Check backend console for claim detection logs
+- Verify ALLOWED_DOMAINS includes relevant sources
+- Speech must contain clear factual claims to trigger detection
 
 ## Development
 
@@ -288,24 +311,10 @@ uv run pytest tests/
 
 ### Adding New Domains
 
-Update the ALLOWED_DOMAINS environment variable in `.env`:
+Update the ALLOWED_DOMAINS environment variable in `backend/.env`:
 
 ```env
 ALLOWED_DOMAINS=docs.python.org,stackoverflow.com,developer.mozilla.org
-```
-
-### Customizing Prompts
-
-Edit `backend/config/prompts.yaml` to customize AI agent behavior:
-
-```yaml
-claim_extraction:
-  system_prompt: "Your custom claim extraction instructions..."
-  user_prompt_template: "Extract claims from: {text}"
-
-fact_verification:
-  system_prompt: "Your custom verification instructions..."
-  user_prompt_template: "Verify this claim: {claim_text}\nEvidence: {passages}"
 ```
 
 ## API Performance
@@ -318,15 +327,16 @@ fact_verification:
 
 ## Architecture Details
 
-### Voice Processing Flow
+### Processing Pipeline
 
-1. **Audio Capture**: Daily.co WebRTC transport captures microphone audio
+1. **Audio Capture**: System audio monitoring using sounddevice library
 2. **VAD**: Silero VAD detects speech segments
-3. **STT**: Groq/Avalon converts speech to text
+3. **STT**: Groq Whisper converts speech to text
 4. **Sentence Buffering**: Accumulates text until sentence boundary detected
-5. **Claim Extraction**: PydanticAI analyzes sentence for factual claims
+5. **Claim Extraction**: PydanticAI analyses sentence for factual claims
 6. **Web Search**: Exa searches trusted domains for evidence
-7. **Verification**: PydanticAI analyzes evidence and generates verdict
+7. **Verification**: PydanticAI analyses evidence and generates verdict
+8. **WebSocket Delivery**: Verdict sent to Chrome extension in real-time
 
 ### Key Design Decisions
 
@@ -347,11 +357,11 @@ fact_verification:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
+## Acknowledgements
 
 - [PydanticAI](https://github.com/pydantic/pydantic-ai) for structured AI outputs
-- [Pipecat](https://github.com/pipecat-ai/pipecat) for real-time audio processing
 - [Exa](https://exa.ai) for fast neural search
 - [Groq](https://groq.com) for LLM and STT services
-- [Daily.co](https://daily.co) for WebRTC infrastructure
+- [FastAPI](https://fastapi.tiangolo.com/) for the WebSocket server framework
+- [Pipecat](https://github.com/pipecat-ai/pipecat) for audio processing components
 - [Avalon](https://avalon.ai) for alternative STT services
