@@ -1,7 +1,7 @@
 # Realtime Meeting Fact-Checker — Implementation Spec (Phase 1: Web Search Only)
 
 **Status:** Phase 1 MVP (Pipecat + Daily.co hybrid architecture)
-**Deployment:** Daily.co WebRTC rooms (cloud-hosted bot)
+**Deployment:** Local development (bot runs on developer's laptop, frontend in browser, Daily.co provides WebRTC infrastructure)
 **Timebox:** 24 hours (3-person team)
 **Language:** Python 3.12
 **Package Manager:** uv (fast, reliable Python package installer)
