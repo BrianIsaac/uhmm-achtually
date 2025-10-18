@@ -6,8 +6,8 @@ from typing import List
 from loguru import logger
 from pydantic_ai import Agent
 
-from src.models.claim_models import Claim, ClaimExtractionResult
-from src.utils.config import get_dev_config, get_prompts
+from src.domain.models import Claim, ClaimExtractionResult
+from src.infrastructure.config import get_dev_config, get_prompts
 
 
 class ClaimExtractor:

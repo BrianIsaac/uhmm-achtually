@@ -6,8 +6,7 @@ from typing import List, Optional
 from loguru import logger
 from pipecat.transports.daily.transport import DailyTransport
 
-from src.models.claim_models import Claim
-from src.models.verdict_models import FactCheckVerdict
+from src.domain.models import Claim, FactCheckVerdict
 from src.processors.claim_extractor import ClaimExtractor
 from src.processors.fact_check_messenger import FactCheckMessenger
 from src.processors.web_fact_checker import WebFactChecker

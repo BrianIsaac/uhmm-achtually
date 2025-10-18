@@ -9,10 +9,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from src.models.claim_models import Claim
-from src.models.verdict_models import FactCheckVerdict
+from src.domain.models import Claim, FactCheckVerdict
 from src.services.exa_client import ExaClient
-from src.utils.config import get_dev_config, get_prompts
+from src.infrastructure.config import get_dev_config, get_prompts
 
 
 class VerificationResult(BaseModel):
