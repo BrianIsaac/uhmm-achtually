@@ -1,6 +1,6 @@
 """Pydantic models for claim extraction."""
 
-from typing import List, Literal
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -10,14 +10,8 @@ class Claim(BaseModel):
     text: str = Field(
         description="The factual claim text that can be verified"
     )
-    claim_type: Literal[
-        "version",
-        "api",
-        "regulatory",
-        "definition",
-        "number",
-        "decision"
-    ] = Field(
+    claim_type: Any = Field(
+        default="definition",  # Default to most common type
         description="Type of factual claim"
     )
 

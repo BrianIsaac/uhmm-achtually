@@ -87,8 +87,18 @@ class VerificationService:
                 )
             else:
                 # Generic verification error
-                logger.error(f"Unexpected error verifying claim: {e}", exc_info=True)
+                # The error "'error'" suggests a KeyError - let's capture more detail
+                error_type = type(e).__name__
+                error_str = str(e)
+
+                # Special handling for KeyError which prints as "'key'"
+                if error_type == "KeyError":
+                    logger.error(f"KeyError accessing key {error_str} during claim verification", exc_info=True)
+                    logger.error(f"Full exception details: {repr(e)}")
+                else:
+                    logger.error(f"Unexpected error verifying claim: {error_type}: {error_str}", exc_info=True)
+
                 raise VerificationError(
                     "Failed to verify claim",
-                    {"claim": claim.text, "error": str(e), "error_type": type(e).__name__}
+                    {"claim": claim.text, "error": error_str, "error_type": error_type}
                 )
