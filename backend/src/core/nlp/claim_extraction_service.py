@@ -5,6 +5,7 @@ from loguru import logger
 
 from src.processors.claim_extractor import ClaimExtractor
 from src.models.claim_models import Claim
+from src.domain.exceptions import ClaimExtractionError, GroqAPIError
 
 
 class ClaimExtractionService:
@@ -48,6 +49,24 @@ class ClaimExtractionService:
 
             return claims
 
+        except (ConnectionError, TimeoutError) as e:
+            # Network-related errors from Groq API
+            logger.error(f"Network error during claim extraction: {e}")
+            raise GroqAPIError(
+                "Failed to connect to Groq API",
+                {"text_length": len(text), "error_type": type(e).__name__}
+            )
+        except ValueError as e:
+            # Invalid response or parsing error
+            logger.error(f"Invalid response during claim extraction: {e}")
+            raise ClaimExtractionError(
+                "Invalid response from claim extractor",
+                {"text_preview": text[:100], "error": str(e)}
+            )
         except Exception as e:
-            logger.error(f"Failed to extract claims from text: {e}", exc_info=True)
-            raise
+            # Unexpected errors
+            logger.error(f"Unexpected error extracting claims: {e}", exc_info=True)
+            raise ClaimExtractionError(
+                "Failed to extract claims from text",
+                {"text_length": len(text), "error": str(e), "error_type": type(e).__name__}
+            )

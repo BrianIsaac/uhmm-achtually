@@ -6,6 +6,13 @@ from loguru import logger
 from src.processors.web_fact_checker import WebFactChecker
 from src.models.claim_models import Claim
 from src.models.verdict_models import FactCheckVerdict
+from src.domain.exceptions import (
+    VerificationError,
+    EvidenceSearchError,
+    ExaAPIError,
+    GroqAPIError,
+    TimeoutError
+)
 
 
 class VerificationService:
@@ -49,6 +56,40 @@ class VerificationService:
 
             return verdict
 
+        except (ConnectionError, TimeoutError) as e:
+            # Network-related errors
+            logger.error(f"Network error during verification: {e}")
+            raise EvidenceSearchError(
+                "Failed to search for evidence",
+                {"claim": claim.text, "error_type": type(e).__name__}
+            )
+        except ValueError as e:
+            # Invalid response or parsing error
+            logger.error(f"Invalid verification response: {e}")
+            raise VerificationError(
+                "Invalid response during verification",
+                {"claim": claim.text, "error": str(e)}
+            )
         except Exception as e:
-            logger.error(f"Failed to verify claim '{claim.text}': {e}", exc_info=True)
-            raise
+            # Check if it's an API-specific error
+            error_message = str(e).lower()
+
+            if "exa" in error_message:
+                logger.error(f"Exa API error during verification: {e}")
+                raise ExaAPIError(
+                    "Evidence search failed",
+                    {"claim": claim.text, "error": str(e)}
+                )
+            elif "groq" in error_message:
+                logger.error(f"Groq API error during verification: {e}")
+                raise GroqAPIError(
+                    "Verification analysis failed",
+                    {"claim": claim.text, "error": str(e)}
+                )
+            else:
+                # Generic verification error
+                logger.error(f"Unexpected error verifying claim: {e}", exc_info=True)
+                raise VerificationError(
+                    "Failed to verify claim",
+                    {"claim": claim.text, "error": str(e), "error_type": type(e).__name__}
+                )
