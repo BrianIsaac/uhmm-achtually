@@ -3,17 +3,62 @@
 claim_extraction:
   system_prompt: |
     You are a fact-checking assistant that identifies factual claims in text.
-    Extract only claims that can be verified as true or false.
-    Focus on objective, verifiable statements about facts, dates, numbers, or events.
-    Ignore opinions, predictions, or subjective statements.
+    Extract ONLY claims that are EXPLICITLY stated in the given text.
 
-  user_prompt_template: |
-    Extract factual claims from the following text:
-    {text}
+    IMPORTANT RULES:
+    - ONLY extract claims that are DIRECTLY stated in the input text
+    - DO NOT generate example facts or placeholder claims
+    - If the input contains no factual claims (e.g., "Okay", "Thank you", greetings, questions), return an empty list
+    - Focus on objective, verifiable statements about facts, dates, numbers, or events
+    - Ignore opinions, predictions, or subjective statements
+    - For short phrases or interjections with no factual content, return NO claims
 
-    Return claims as a JSON array with each claim having:
-    - text: the claim text
-    - claim_type: one of [version, api, regulatory, definition, number, decision]
+user_prompt_template: |
+    Verify this claim: {claim_text}
+
+    Evidence found:
+    {passages}
+
+    Here are examples of how to classify claims:
+
+    Example 1 - SUPPORTED:
+    Claim: "Python 3.12 was released in October 2023"
+    Evidence: "Python 3.12.0 final was released on October 2, 2023"
+    Status: supported
+    Confidence: 0.95
+    Rationale: Evidence directly confirms the claim with specific date
+
+    Example 2 - CONTRADICTED:
+    Claim: "The Eiffel Tower is located in London"
+    Evidence: "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France"
+    Status: contradicted
+    Confidence: 1.0
+    Rationale: Evidence explicitly states the tower is in Paris, not London
+
+    Example 3 - UNCLEAR:
+    Claim: "TypeScript is faster than JavaScript"
+    Evidence: "TypeScript compiles to JavaScript. TypeScript adds static typing which can catch errors at compile time"
+    Status: unclear
+    Confidence: 0.3
+    Rationale: Evidence discusses TypeScript features but doesn't address runtime performance comparison
+
+    Example 4 - NOT_FOUND:
+    Claim: "The new API endpoint supports OAuth 2.0"
+    Evidence: [No relevant passages found]
+    Status: not_found
+    Confidence: 0.0
+    Rationale: No evidence available to verify this claim
+
+    Based on these examples, determine:
+    - status: one of [supported, contradicted, unclear, not_found]
+      * supported: evidence directly confirms the claim
+      * contradicted: evidence directly refutes the claim
+      * unclear: relevant information found but neither clearly supports nor refutes
+      * not_found: no relevant evidence available
+    - confidence: 0.0 to 1.0
+    - rationale: brief explanation
+    - evidence_url: most relevant source URL
+
 
 fact_verification:
   system_prompt: |

@@ -1,88 +1,66 @@
-"""Service for aggregating text into complete sentences."""
+"""Service for aggregating text into chunks."""
 
-import re
-from typing import List
+import time
+from typing import List, Optional
 from loguru import logger
 
 
 class SentenceAggregator:
     """
-    Aggregates text fragments into complete sentences.
+    Aggregates text fragments into chunks based on time.
 
-    This service buffers incoming text and identifies complete sentences
-    based on punctuation patterns.
+    This service buffers incoming text for a fixed duration (3 seconds)
+    before processing it as a complete chunk.
     """
 
-    def __init__(self):
-        """Initialize the sentence aggregator."""
+    def __init__(self, buffer_duration: float = 3.0):
+        """Initialize the sentence aggregator.
+
+        Args:
+            buffer_duration: Duration in seconds to buffer text before processing (default 3.0)
+        """
         self._buffer = ""
-        # Improved pattern that avoids splitting on decimal points
-        # Matches: period not preceded by digit and followed by space, or ! or ?
-        # This prevents splitting on decimal numbers like 3.16
-        self._sentence_pattern = re.compile(r'(?<![0-9])\.(?=\s)|[!?](?=\s|$)')
+        self._buffer_start_time: Optional[float] = None
+        self._buffer_duration = buffer_duration
 
     def add_text(self, text: str) -> List[str]:
         """
-        Add text to the buffer and extract complete sentences.
+        Add text to the buffer and extract complete chunks based on time.
 
         Args:
             text: Text to add to the buffer
 
         Returns:
-            List of complete sentences found
+            List of complete text chunks (usually 0 or 1)
         """
         if not text:
             return []
+
+        current_time = time.time()
+
+        # Start buffer timer if this is the first text
+        if self._buffer_start_time is None:
+            self._buffer_start_time = current_time
 
         # Add text to buffer with proper spacing
         if self._buffer and not self._buffer.endswith(' '):
             self._buffer += ' '
         self._buffer += text.strip()
 
-        # Extract complete sentences
-        sentences = self._extract_sentences()
+        # Check if buffer duration has been exceeded
+        chunks = []
+        if current_time - self._buffer_start_time >= self._buffer_duration:
+            if self._buffer:
+                chunks.append(self._buffer)
+                logger.debug(f"Extracted chunk after {self._buffer_duration}s: {self._buffer[:50]}...")
+                self._buffer = ""
+                self._buffer_start_time = None
 
-        if sentences:
-            logger.debug(f"Extracted {len(sentences)} complete sentence(s)")
-
-        return sentences
-
-    def _extract_sentences(self) -> List[str]:
-        """
-        Extract complete sentences from the buffer.
-
-        Returns:
-            List of complete sentences
-        """
-        sentences = []
-
-        # Special handling for numbers with decimal points
-        # Don't split on periods that are between digits
-        protected_buffer = self._buffer
-
-        # Find sentence-ending punctuation that's not a decimal point
-        # Split on: '. ' (period + space), '! ', '? ', or these at end of string
-        parts = re.split(r'(?<=[.!?])\s+', protected_buffer)
-
-        if len(parts) == 1:
-            # No complete sentence found yet
-            return sentences
-
-        # All parts except the last are complete sentences
-        for i, part in enumerate(parts[:-1]):
-            # Don't treat decimal numbers as sentence endings
-            # Check if this looks like a complete sentence
-            if part and not re.match(r'^\d+$', part.rstrip('.')):
-                sentences.append(part)
-
-        # Keep the last part in the buffer (incomplete sentence)
-        self._buffer = parts[-1] if parts[-1] else ""
-
-        return sentences
+        return chunks
 
     def get_pending_text(self) -> str:
         """
-        Get any pending text in the buffer that hasn't formed a complete sentence.
+        Get any pending text in the buffer that hasn't been processed yet.
 
         Returns:
             Pending text in the buffer
@@ -90,12 +68,13 @@ class SentenceAggregator:
         return self._buffer
 
     def clear(self) -> None:
-        """Clear the buffer."""
+        """Clear the buffer and reset timer."""
         self._buffer = ""
+        self._buffer_start_time = None
 
     def force_flush(self) -> List[str]:
         """
-        Force flush the buffer, treating any remaining text as a complete sentence.
+        Force flush the buffer, treating any remaining text as a complete chunk.
 
         Returns:
             List containing the buffer content if not empty
@@ -103,11 +82,12 @@ class SentenceAggregator:
         if not self._buffer:
             return []
 
-        sentence = self._buffer.strip()
+        chunk = self._buffer.strip()
         self._buffer = ""
+        self._buffer_start_time = None
 
-        if sentence:
-            logger.debug(f"Force flushed incomplete sentence: {sentence}")
-            return [sentence]
+        if chunk:
+            logger.debug(f"Force flushed chunk: {chunk[:50]}...")
+            return [chunk]
 
         return []
