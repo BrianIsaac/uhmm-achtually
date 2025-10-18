@@ -5,12 +5,9 @@ Buffers partial transcripts until sentence completion, then emits TextFrame.
 
 import re
 
+from loguru import logger
 from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-
-from src.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
 
 
 class SentenceAggregator(FrameProcessor):

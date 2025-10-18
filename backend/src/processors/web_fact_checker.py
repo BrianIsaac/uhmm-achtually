@@ -3,7 +3,7 @@
 import json
 import os
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -18,7 +18,7 @@ from src.utils.config import get_dev_config, get_prompts
 class VerificationResult(BaseModel):
     """Structured result from fact verification."""
 
-    status: str = Field(
+    status: Literal["supported", "contradicted", "unclear", "not_found"] = Field(
         description="Verdict status: supported, contradicted, unclear, or not_found"
     )
     confidence: float = Field(
@@ -107,6 +107,7 @@ class WebFactChecker:
 
             exa_latency = (time.time() - start_time) * 1000
             logger.info(f"Exa search completed in {exa_latency:.0f}ms")
+            logger.debug(f"Exa returned {len(results)} results")
 
             if not results:
                 # No results found
@@ -157,10 +158,37 @@ class WebFactChecker:
             FactCheckVerdict with structured output from Groq
         """
         # Format evidence passages
-        passages = json.dumps(
-            [{"title": r.title, "url": r.url, "text": r.text} for r in results],
-            indent=2,
-        )
+        # Handle different possible attribute names from Exa
+        passages = []
+        for r in results:
+            try:
+                # Check what attributes the result object has
+                if hasattr(r, '__dict__'):
+                    logger.debug(f"Result attributes: {list(r.__dict__.keys())}")
+
+                passage = {
+                    "title": getattr(r, 'title', ''),
+                    "url": getattr(r, 'url', ''),
+                    "text": getattr(r, 'text', getattr(r, 'content', ''))  # Try 'text' first, then 'content'
+                }
+
+                # If text is still empty, try to get any content
+                if not passage["text"] and hasattr(r, '__dict__'):
+                    # Look for any text-like field
+                    for key in ['snippet', 'extract', 'body', 'description']:
+                        if hasattr(r, key):
+                            passage["text"] = getattr(r, key, '')
+                            break
+
+                passages.append(passage)
+            except Exception as e:
+                logger.error(f"Error processing result: {e}")
+                logger.debug(f"Result type: {type(r)}, Result: {r}")
+
+        if not passages:
+            raise ValueError("No valid passages extracted from search results")
+
+        passages = json.dumps(passages, indent=2)
 
         # Create the user prompt with claim and evidence
         user_prompt = self._prompts.fact_verification["user_prompt_template"].format(

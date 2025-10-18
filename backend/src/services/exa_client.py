@@ -26,24 +26,38 @@ class ExaClient:
     async def search_for_claim(
         self,
         claim: str,
-        num_results: int = 2
+        num_results: int = 5
     ) -> list:
         """Search for evidence related to a claim.
 
         Args:
             claim: Factual claim to verify
-            num_results: Number of results to return (default: 2)
+            num_results: Number of results to return (default: 5)
 
         Returns:
             List of search results with title, url, text attributes
         """
-        # Use asyncio.to_thread to avoid blocking the event loop
-        response = await asyncio.to_thread(
-            self.exa.search_and_contents,
-            claim,
-            use_autoprompt=True,
-            num_results=num_results,
-            include_domains=self.allowed_domains,
-            text={"max_characters": 2000}
-        )
-        return response.results
+        try:
+            # Use asyncio.to_thread to avoid blocking the event loop
+            response = await asyncio.to_thread(
+                self.exa.search_and_contents,
+                claim,
+                type="keyword",  # Use keyword search for speed (< 0.5s)
+                use_autoprompt=False,  # Disabled for speed
+                num_results=min(num_results, 3),  # Limit to 3 for faster response
+                include_domains=self.allowed_domains,
+                text={"max_characters": 1000}  # Reduced for faster response
+            )
+
+            # Check if response has results
+            if hasattr(response, 'results'):
+                return response.results
+            else:
+                # Log the actual response for debugging
+                print(f"Unexpected Exa response: {response}")
+                return []
+
+        except Exception as e:
+            print(f"Exa search error: {e}")
+            # Return empty list on error to allow graceful fallback
+            return []

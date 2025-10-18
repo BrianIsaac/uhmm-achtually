@@ -1,175 +1,200 @@
-"""Main entry point for the fact-checker bot.
+#!/usr/bin/env python3
+"""Voice-enabled fact-checker bot using PydanticAI.
 
-Initialises and runs the Pipecat pipeline using V2 processors with PydanticAI.
+This version actually listens to voice input from Daily.co and processes it
+through the PydanticAI pipeline in real-time.
 """
 
 import asyncio
-import os
-import sys
-
+import re
 from dotenv import load_dotenv
-from loguru import logger
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams
+
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
-from pipecat.transcriptions.language import Language
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.frames.frames import Frame, TranscriptionFrame
+from loguru import logger
 
-from src.processors.continuous_audio_aggregator import ContinuousAudioAggregator
-from src.processors.sentence_aggregator import SentenceAggregator
-from src.processors.pipeline_bridge import PipelineBridge
-from src.services.stt import AvalonSTT, GroqSTT
-from src.utils.config import get_dev_config, get_settings
-from src.utils.pipecat_patch import apply_pipecat_patch
+from src.services.stt import GroqSTT
+from src.utils.config import get_settings, get_dev_config
+from src.processors.claim_extractor import ClaimExtractor
+from src.processors.web_fact_checker import WebFactChecker
 
 # Load environment variables
 load_dotenv()
 
 
-async def main():
-    """Run the fact-checker bot with V2 pipeline."""
-    # IMPORTANT: Apply Pipecat 0.0.90 race condition patch BEFORE creating any processors
-    # This fixes: AttributeError: '__process_queue' not found
-    # See: https://github.com/pipecat-ai/pipecat/issues/2385
-    # Remove this once upgrading to Pipecat >= 0.0.91 (when fix is released)
-    apply_pipecat_patch()
+class VoiceToPydanticAI(FrameProcessor):
+    """Processor that intercepts transcriptions and sends them to PydanticAI."""
 
+    def __init__(self, groq_api_key: str, exa_api_key: str):
+        """Initialize with PydanticAI components.
+
+        Args:
+            groq_api_key: Groq API key
+            exa_api_key: Exa API key
+        """
+        super().__init__()
+        self.sentence_buffer = ""
+
+        # Initialize PydanticAI components
+        logger.info("Initializing PydanticAI components...")
+        self.claim_extractor = ClaimExtractor(groq_api_key)
+        self.fact_checker = WebFactChecker(
+            groq_api_key=groq_api_key,
+            exa_api_key=exa_api_key,
+            allowed_domains=get_settings().allowed_domains_list
+        )
+        logger.info("PydanticAI components ready!")
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        """Process frames from the pipeline.
+
+        Args:
+            frame: Incoming frame
+            direction: Frame direction
+        """
+        # Intercept TranscriptionFrames
+        if isinstance(frame, TranscriptionFrame):
+            text = frame.text
+            logger.info(f"VOICE INPUT: {text}")
+
+            # Buffer the transcription
+            self.sentence_buffer += " " + text
+            self.sentence_buffer = self.sentence_buffer.strip()
+
+            # Check for complete sentences
+            if re.search(r'[.!?]\s*$', self.sentence_buffer):
+                sentence = self.sentence_buffer
+                self.sentence_buffer = ""
+
+                logger.info(f"Complete sentence: {sentence}")
+
+                # Process through PydanticAI pipeline
+                asyncio.create_task(self.process_sentence(sentence))
+
+        # Forward the frame
+        await super().process_frame(frame, direction)
+
+    async def process_sentence(self, sentence: str):
+        """Process a sentence through PydanticAI.
+
+        Args:
+            sentence: Complete sentence to process
+        """
+        try:
+            logger.info("=" * 60)
+            logger.info(f"PROCESSING: {sentence}")
+            logger.info("=" * 60)
+
+            # Extract claims with PydanticAI
+            logger.info("Extracting claims with PydanticAI...")
+            claims = await self.claim_extractor.extract(sentence)
+
+            if not claims:
+                logger.info("No factual claims found")
+                return
+
+            logger.info(f"Found {len(claims)} claim(s)")
+            for claim in claims:
+                logger.info(f"   - {claim.text} (type: {claim.claim_type})")
+
+            # Fact-check each claim with PydanticAI
+            logger.info("\nFact-checking with PydanticAI...")
+            for i, claim in enumerate(claims, 1):
+                logger.info(f"\nClaim {i}: {claim.text}")
+
+                try:
+                    verdict = await self.fact_checker.verify(claim)
+
+                    # Display verdict
+                    logger.info(f"   Status: {verdict.status}")
+                    logger.info(f"   Confidence: {verdict.confidence:.2%}")
+                    logger.info(f"   Rationale: {verdict.rationale}")
+
+                    if verdict.evidence_url:
+                        logger.info(f"   Evidence: {verdict.evidence_url}")
+
+                except Exception as e:
+                    logger.error(f"   Error fact-checking claim: {e}")
+
+            logger.info("=" * 60 + "\n")
+
+        except Exception as e:
+            logger.error(f"Error processing sentence: {e}", exc_info=True)
+
+
+async def main():
+    """Run the voice-enabled PydanticAI fact-checker."""
     settings = get_settings()
     dev_config = get_dev_config()
-    logger.info("Starting fact-checker bot with V2 pipeline...")
-    logger.info(f"Daily room URL: {settings.DAILY_ROOM_URL}")
-    logger.info(f"VAD disabled: {dev_config.vad.disable}")
+
+    logger.info("=" * 70)
+    logger.info("VOICE-ENABLED PYDANTIC-AI FACT-CHECKER")
+    logger.info("Listening for voice input -> Processing with PydanticAI")
+    logger.info("=" * 70)
 
     try:
-        # Stage 1: DailyTransport (with or without VAD based on config)
-        if dev_config.vad.disable:
-            # No VAD - continuous audio processing
-            logger.info("VAD disabled - using continuous audio processing")
-            transport = DailyTransport(
-                settings.DAILY_ROOM_URL,
-                None,  # No token for public rooms
-                "Fact Checker Bot",
-                DailyParams(
-                    audio_in_enabled=True,
-                    audio_out_enabled=False,  # No TTS in Phase 1
-                    vad_enabled=False
-                )
-            )
-        else:
-            # VAD enabled - traditional segmented approach
-            logger.info(
-                f"VAD enabled - start_secs={dev_config.vad.start_secs}, "
-                f"stop_secs={dev_config.vad.stop_secs}, "
-                f"min_volume={dev_config.vad.min_volume}"
-            )
-            # Create VAD analyzer with custom parameters
-            vad_params = VADParams(
-                start_secs=dev_config.vad.start_secs,
-                stop_secs=dev_config.vad.stop_secs,
-                min_volume=dev_config.vad.min_volume
-            )
-            vad_analyzer = SileroVADAnalyzer(params=vad_params)
-            transport = DailyTransport(
-                settings.DAILY_ROOM_URL,
-                None,  # No token for public rooms
-                "Fact Checker Bot",
-                DailyParams(
-                    audio_in_enabled=True,
-                    audio_out_enabled=False,  # No TTS in Phase 1
-                    vad_analyzer=vad_analyzer
-                )
-            )
+        # Set up VAD
+        vad_params = VADParams(
+            start_secs=0.1,
+            stop_secs=0.8,
+            min_volume=0.5
+        )
+        vad = SileroVADAnalyzer(params=vad_params)
 
-        # Stage 2: STT Service (provider-based)
-        stt_provider = dev_config.stt.provider
-        if stt_provider == "avalon":
-            if not settings.AVALON_API_KEY:
-                raise ValueError(
-                    "AVALON_API_KEY environment variable not set but STT provider is 'avalon'. "
-                    "Please add AVALON_API_KEY to your .env file or change provider in dev_config.yaml"
-                )
-            # Convert language string to Language enum (e.g., "en" -> Language.EN)
-            avalon_language = getattr(Language, dev_config.stt.avalon.language.upper())
-            stt = AvalonSTT(
-                api_key=settings.AVALON_API_KEY,
-                model=dev_config.stt.avalon.model,
-                language=avalon_language
+        # Set up Daily transport
+        transport = DailyTransport(
+            settings.DAILY_ROOM_URL,
+            None,
+            "PydanticAI Voice Bot",
+            DailyParams(
+                audio_in_enabled=True,
+                audio_out_enabled=False,
+                vad_analyzer=vad
             )
-            logger.info(
-                f"Using Avalon STT (model: {dev_config.stt.avalon.model}, "
-                f"language: {dev_config.stt.avalon.language})"
-            )
-        elif stt_provider == "groq":
-            # Convert language string to Language enum (e.g., "en" -> Language.EN)
-            groq_language = getattr(Language, dev_config.stt.groq.language.upper())
-            stt = GroqSTT(
-                api_key=settings.GROQ_API_KEY,
-                model=dev_config.stt.groq.model,
-                language=groq_language
-            )
-            logger.info(
-                f"Using Groq STT (model: {dev_config.stt.groq.model}, "
-                f"language: {dev_config.stt.groq.language})"
-            )
-        else:
-            raise ValueError(f"Unknown STT provider: {stt_provider}. Must be 'groq' or 'avalon'")
-
-        # Stage 3: SentenceAggregator
-        aggregator = SentenceAggregator()
-
-        # Check if we have required API keys for V2 pipeline
-        if not settings.EXA_API_KEY:
-            logger.error("EXA_API_KEY not found - fact-checking requires this API key")
-            raise ValueError("EXA_API_KEY is required for fact-checking functionality")
-
-        # Use V2 pipeline with PydanticAI
-        logger.info("Using V2 Pipeline with PydanticAI")
-
-        pipeline_bridge = PipelineBridge(
-            groq_api_key=settings.GROQ_API_KEY,
-            exa_api_key=settings.EXA_API_KEY,
-            daily_transport=transport,
-            allowed_domains=settings.allowed_domains_list
         )
 
-        logger.info("V2 Pipeline bridge enabled - using modern async processing")
+        # Set up STT
+        stt = GroqSTT(
+            api_key=settings.GROQ_API_KEY,
+            model="whisper-large-v3-turbo"
+        )
 
-        # Build pipeline
-        pipeline_stages = [
+        # Set up our PydanticAI processor
+        pydantic_processor = VoiceToPydanticAI(
+            groq_api_key=settings.GROQ_API_KEY,
+            exa_api_key=settings.EXA_API_KEY
+        )
+
+        # Create pipeline: Transport → STT → PydanticAI Processor
+        pipeline = Pipeline([
             transport.input(),
-        ]
-
-        # Add STT stage (with or without continuous audio aggregator)
-        if dev_config.vad.disable:
-            # Insert ContinuousAudioAggregator before sentence aggregator
-            continuous_audio = ContinuousAudioAggregator(stt_service=stt)
-            pipeline_stages.append(continuous_audio)
-        else:
-            # Use traditional VAD-based STT
-            pipeline_stages.append(stt)
-
-        pipeline_stages.append(aggregator)
-
-        # Add V2 bridge
-        pipeline_stages.append(pipeline_bridge)
-
-        pipeline_stages.append(transport.output())
-
-        pipeline = Pipeline(pipeline_stages)
-
-        task = PipelineTask(pipeline)
+            stt,
+            pydantic_processor,
+            transport.output()
+        ])
 
         # Run the pipeline
+        task = PipelineTask(pipeline)
         runner = PipelineRunner()
+
+        logger.info(f"Joining room: {settings.DAILY_ROOM_URL}")
+        logger.info("Ready to listen! Speak into your microphone...")
+        logger.info("Try saying: 'Python 3.12 removed the distutils package.'")
+        logger.info("=" * 70 + "\n")
+
         await runner.run(task)
 
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt, shutting down...")
+        logger.info("\nShutting down...")
     except Exception as e:
-        logger.error(f"Error running bot: {e}")
-        sys.exit(1)
+        logger.error(f"Fatal error: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":
