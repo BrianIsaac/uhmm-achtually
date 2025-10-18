@@ -77,7 +77,7 @@ frontend/
 │       └── useFactCheck.js          # App message handler
 ├── public/
 │   └── index.html
-├── .env.local                       # VITE_DAILY_ROOM_URL
+├── .env.local                       # DAILY_ROOM_URL
 ├── package.json
 └── vite.config.js
 ```
@@ -840,7 +840,7 @@ onUnmounted(() => {
 
 ```bash
 # Daily room URL (must be created via Daily API first)
-VITE_DAILY_ROOM_URL=https://yourcompany.daily.co/fact-checker-room
+VITE_DAILY_ROOM_URL=https://uhmm-achtually.daily.co/uhmm-achtually
 ```
 
 ### Vite Configuration (vite.config.js)
@@ -1014,7 +1014,7 @@ cd frontend
 vercel
 
 # Set environment variables in Vercel dashboard:
-# VITE_DAILY_ROOM_URL=https://yourcompany.daily.co/room
+# VITE_DAILY_ROOM_URL=https://uhmm-achtually.daily.co/uhmm-achtually
 ```
 
 ### Production (Netlify)
