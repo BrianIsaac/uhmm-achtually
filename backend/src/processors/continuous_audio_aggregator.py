@@ -16,7 +16,7 @@ from pipecat.frames.frames import (
     TranscriptionFrame,
     ErrorFrame,
 )
-from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.groq.stt import GroqSTTService
 
 from src.utils.config import get_dev_config
@@ -75,7 +75,7 @@ class ContinuousAudioAggregator(FrameProcessor):
             f"buffer_size={self._buffer_size} bytes"
         )
 
-    async def process_frame(self, frame: Frame, direction):
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Process incoming frames.
 
         Buffers UserAudioRawFrame chunks and sends them to STT when buffer is full.
@@ -84,24 +84,24 @@ class ContinuousAudioAggregator(FrameProcessor):
             frame: Frame to process
             direction: Frame direction (not used)
         """
+        # Always pass control frames to parent class first
+        await super().process_frame(frame, direction)
+
         # Handle control frames
         if isinstance(frame, StartFrame):
             # Reset buffers on start
             self._audio_buffer = bytearray()
             self._overlap_buffer = bytearray()
-            await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, CancelFrame):
             # Clear buffers on cancel
             self._audio_buffer = bytearray()
             self._overlap_buffer = bytearray()
-            await self.push_frame(frame, direction)
             return
 
         # Only process audio frames
         if not isinstance(frame, UserAudioRawFrame):
-            await self.push_frame(frame, direction)
             return
 
         # Add audio to buffer
@@ -148,9 +148,6 @@ class ContinuousAudioAggregator(FrameProcessor):
             except Exception as e:
                 logger.error(f"STT error: {e}")
                 await self.push_frame(ErrorFrame(f"STT transcription failed: {e}"), direction)
-
-        # Always pass through the original frame
-        await self.push_frame(frame, direction)
 
     def _create_wav(self, pcm_data: bytes) -> bytes:
         """Create a WAV file from PCM audio data.

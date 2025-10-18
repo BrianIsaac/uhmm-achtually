@@ -5,15 +5,20 @@
 vad:
   # Set to true to bypass VAD and send continuous audio to STT
   # Use this if VAD is not detecting speech properly
-  disable: true
+  disable: false
 
   # VAD sensitivity parameters (only used when disable=false)
   # start_secs: How long audio must contain speech before triggering (in seconds)
   # stop_secs: How long silence must persist before ending speech segment (in seconds)
   # min_volume: Minimum volume threshold (0.0 to 1.0)
-  start_secs: 0.2
-  stop_secs: 0.2
-  min_volume: 0.6
+  #
+  # Optimized for low latency:
+  # - start_secs: 0.1 = faster speech detection
+  # - stop_secs: 0.8 = allows for natural pauses without cutting off
+  # - min_volume: 0.5 = more sensitive to quieter speech
+  start_secs: 0.1
+  stop_secs: 0.8
+  min_volume: 0.5
 
 # Continuous Audio Processing (only used when vad.disable=true)
 continuous_audio:
@@ -23,7 +28,7 @@ continuous_audio:
 
   # Whether to overlap buffers to avoid cutting off words
   # If true, buffers will overlap by 50% (e.g., 2.5s buffer with 1.25s overlap)
-  overlap: true
+  overlap: false
 
 # Speech-to-Text Settings
 stt:
@@ -32,6 +37,19 @@ stt:
 
   # Language code (ISO 639-1)
   language: "en"
+
+# LLM Settings (for claim extraction and verification)
+llm:
+  # Model for claim extraction
+  # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant
+  claim_extraction_model: "llama-3.1-8b-instant"
+
+  # Model for fact verification
+  # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant
+  verification_model: "llama-3.3-70b-versatile"
+
+  # Temperature for LLM calls (0.0-1.0, lower = more deterministic)
+  temperature: 0.1
 
 # Logging Settings
 logging:

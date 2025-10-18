@@ -65,6 +65,13 @@ class STTConfig(BaseModel):
     language: str = "en"
 
 
+class LLMConfig(BaseModel):
+    """LLM configuration settings for claim extraction and verification."""
+    claim_extraction_model: str = "llama-3.3-70b-versatile"
+    verification_model: str = "llama-3.3-70b-versatile"
+    temperature: float = 0.1
+
+
 class LoggingConfig(BaseModel):
     """Logging configuration settings."""
     level: str = "INFO"
@@ -76,6 +83,7 @@ class DevConfig(BaseModel):
     vad: VADConfig = VADConfig()
     continuous_audio: ContinuousAudioConfig = ContinuousAudioConfig()
     stt: STTConfig = STTConfig()
+    llm: LLMConfig = LLMConfig()
     logging: LoggingConfig = LoggingConfig()
 
 

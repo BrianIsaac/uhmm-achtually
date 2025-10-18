@@ -19,10 +19,12 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.services.groq.stt import GroqSTTService
 
 from src.utils.config import get_settings, get_dev_config
 from src.utils.logger import setup_logger
+from src.utils.pipecat_patch import apply_pipecat_patch
 from src.processors.sentence_aggregator import SentenceAggregator
 from src.processors.claim_extractor import ClaimExtractor
 from src.processors.web_fact_checker import WebFactChecker
@@ -37,6 +39,12 @@ logger = setup_logger(__name__)
 
 async def main():
     """Run the fact-checker bot with complete Pipecat pipeline (Stages 1-6)."""
+    # IMPORTANT: Apply Pipecat 0.0.90 race condition patch BEFORE creating any processors
+    # This fixes: AttributeError: '__process_queue' not found
+    # See: https://github.com/pipecat-ai/pipecat/issues/2385
+    # Remove this once upgrading to Pipecat >= 0.0.91 (when fix is released)
+    apply_pipecat_patch()
+
     settings = get_settings()
     dev_config = get_dev_config()
     logger.info("Starting fact-checker bot (All 6 stages)...")
@@ -65,6 +73,13 @@ async def main():
                 f"stop_secs={dev_config.vad.stop_secs}, "
                 f"min_volume={dev_config.vad.min_volume}"
             )
+            # Create VAD analyzer with custom parameters
+            vad_params = VADParams(
+                start_secs=dev_config.vad.start_secs,
+                stop_secs=dev_config.vad.stop_secs,
+                min_volume=dev_config.vad.min_volume
+            )
+            vad_analyzer = SileroVADAnalyzer(params=vad_params)
             transport = DailyTransport(
                 settings.daily_room_url,
                 None,  # No token for public rooms
@@ -72,7 +87,7 @@ async def main():
                 DailyParams(
                     audio_in_enabled=True,
                     audio_out_enabled=False,  # No TTS in Phase 1
-                    vad_analyzer=SileroVADAnalyzer()
+                    vad_analyzer=vad_analyzer
                 )
             )
 

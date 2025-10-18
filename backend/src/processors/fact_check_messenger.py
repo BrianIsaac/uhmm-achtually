@@ -5,7 +5,7 @@ Broadcast verdicts via app messages to Vue.js frontend.
 
 import logging
 from pipecat.frames.frames import Frame
-from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.transports.daily.transport import DailyTransport
 
 from src.frames.custom_frames import VerdictFrame
@@ -31,15 +31,14 @@ class FactCheckMessenger(FrameProcessor):
         self.transport = transport
         self.bot_name = bot_name
 
-    async def process_frame(self, frame: Frame, direction: str):
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Broadcast verdicts via app messages.
 
         Args:
             frame: Incoming frame
             direction: Frame direction (upstream/downstream)
         """
-        await super().process_frame(frame, direction)
-
+        # Only process VerdictFrame
         if isinstance(frame, VerdictFrame):
             # Format as JSON for frontend consumption
             message_data = {
@@ -62,5 +61,5 @@ class FactCheckMessenger(FrameProcessor):
             except Exception as e:
                 logger.error(f"App message send failed: {e}")
 
-        # Always pass through frame
-        await self.push_frame(frame, direction)
+        # Always forward all frames to next processor (AFTER our processing)
+        await super().process_frame(frame, direction)

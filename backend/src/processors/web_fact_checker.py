@@ -3,15 +3,17 @@
 Verify claims using Exa web search and Groq verification.
 """
 
+import asyncio
 import json
 import logging
 import time
 from groq import Groq
 from pipecat.frames.frames import Frame
-from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from src.frames.custom_frames import ClaimFrame, VerdictFrame
 from src.services.exa_client import ExaClient
+from src.utils.config import get_dev_config
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +59,16 @@ Never fabricate information.
         self.exa_client = ExaClient(exa_api_key, allowed_domains)
         self.groq_client = Groq(api_key=groq_api_key)
         self._cache = {}  # In-memory cache
+        self._config = get_dev_config()
 
-    async def process_frame(self, frame: Frame, direction: str):
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Verify claims from ClaimFrame.
 
         Args:
             frame: Incoming frame
             direction: Frame direction (upstream/downstream)
         """
-        await super().process_frame(frame, direction)
-
+        # Only process ClaimFrame
         if isinstance(frame, ClaimFrame):
             claim = frame.text
             logger.info(f"Fact-checking: {claim}")
@@ -121,9 +123,8 @@ Never fabricate information.
             except Exception as e:
                 logger.error(f"Fact-checking failed: {e}", exc_info=True)
 
-        else:
-            # Pass through other frames
-            await self.push_frame(frame, direction)
+        # Always forward all frames to next processor (AFTER our processing)
+        await super().process_frame(frame, direction)
 
     async def _verify_with_groq(self, claim: str, results: list) -> dict:
         """Verify claim using Groq LLM.
@@ -145,11 +146,13 @@ Never fabricate information.
             passages=passages
         )
 
-        response = self.groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+        # Use async to avoid blocking the event loop
+        response = await asyncio.to_thread(
+            self.groq_client.chat.completions.create,
+            model=self._config.llm.verification_model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            temperature=0.1
+            temperature=self._config.llm.temperature
         )
 
         return json.loads(response.choices[0].message.content)

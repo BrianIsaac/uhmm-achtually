@@ -3,6 +3,7 @@
 Provides a simple interface for searching the web using Exa neural search.
 """
 
+import asyncio
 from exa_py import Exa
 
 
@@ -36,7 +37,9 @@ class ExaClient:
         Returns:
             List of search results with title, url, text attributes
         """
-        response = self.exa.search_and_contents(
+        # Use asyncio.to_thread to avoid blocking the event loop
+        response = await asyncio.to_thread(
+            self.exa.search_and_contents,
             claim,
             use_autoprompt=True,
             num_results=num_results,
