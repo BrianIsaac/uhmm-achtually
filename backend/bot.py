@@ -20,8 +20,9 @@ from pipecat.pipeline.task import PipelineTask
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.services.groq.stt import GroqSTTService
+from pipecat.transcriptions.language import Language
 
+from src.services.stt import GroqSTT, AvalonSTT
 from src.utils.config import get_settings, get_dev_config
 from src.utils.logger import setup_logger
 from src.utils.pipecat_patch import apply_pipecat_patch
@@ -91,12 +92,39 @@ async def main():
                 )
             )
 
-        # Stage 2: GroqSTTService (Whisper Large v3 Turbo)
-        stt = GroqSTTService(
-            api_key=settings.groq_api_key,
-            model=dev_config.stt.model,
-            language=dev_config.stt.language
-        )
+        # Stage 2: STT Service (provider-based)
+        stt_provider = dev_config.stt.provider
+        if stt_provider == "avalon":
+            if not settings.avalon_api_key:
+                raise ValueError(
+                    "AVALON_API_KEY environment variable not set but STT provider is 'avalon'. "
+                    "Please add AVALON_API_KEY to your .env file or change provider in dev_config.yaml"
+                )
+            # Convert language string to Language enum (e.g., "en" -> Language.EN)
+            avalon_language = getattr(Language, dev_config.stt.avalon.language.upper())
+            stt = AvalonSTT(
+                api_key=settings.avalon_api_key,
+                model=dev_config.stt.avalon.model,
+                language=avalon_language
+            )
+            logger.info(
+                f"Using Avalon STT (model: {dev_config.stt.avalon.model}, "
+                f"language: {dev_config.stt.avalon.language})"
+            )
+        elif stt_provider == "groq":
+            # Convert language string to Language enum (e.g., "en" -> Language.EN)
+            groq_language = getattr(Language, dev_config.stt.groq.language.upper())
+            stt = GroqSTT(
+                api_key=settings.groq_api_key,
+                model=dev_config.stt.groq.model,
+                language=groq_language
+            )
+            logger.info(
+                f"Using Groq STT (model: {dev_config.stt.groq.model}, "
+                f"language: {dev_config.stt.groq.language})"
+            )
+        else:
+            raise ValueError(f"Unknown STT provider: {stt_provider}. Must be 'groq' or 'avalon'")
 
         # Stage 3: SentenceAggregator
         aggregator = SentenceAggregator()

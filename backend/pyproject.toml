@@ -18,6 +18,10 @@ search = [
     "exa-py>=1.0.0",
 ]
 
+stt = [
+    "openai>=1.0.0",  # For Avalon API compatibility
+]
+
 config = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",

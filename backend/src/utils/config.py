@@ -7,7 +7,7 @@ Loads development configuration from dev_config.yaml.
 import yaml
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # APIs
     groq_api_key: str
+    avalon_api_key: str | None = None
     exa_api_key: str | None = None
 
     # Configuration
@@ -59,10 +60,23 @@ class ContinuousAudioConfig(BaseModel):
     overlap: bool = True
 
 
-class STTConfig(BaseModel):
-    """STT configuration settings."""
+class GroqSTTConfig(BaseModel):
+    """Groq STT configuration settings."""
     model: str = "whisper-large-v3-turbo"
     language: str = "en"
+
+
+class AvalonSTTConfig(BaseModel):
+    """Avalon STT configuration settings."""
+    model: str = "avalon-1"
+    language: str = "en"
+
+
+class STTConfig(BaseModel):
+    """STT configuration settings with provider selection."""
+    provider: Literal["groq", "avalon"] = "groq"
+    groq: GroqSTTConfig = GroqSTTConfig()
+    avalon: AvalonSTTConfig = AvalonSTTConfig()
 
 
 class LLMConfig(BaseModel):

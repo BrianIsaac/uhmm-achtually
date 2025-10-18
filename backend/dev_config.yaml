@@ -4,10 +4,8 @@
 # Voice Activity Detection Settings
 vad:
   # Set to true to bypass VAD and send continuous audio to STT
-  # Use this if VAD is not detecting speech properly
   disable: false
 
-  # VAD sensitivity parameters (only used when disable=false)
   # start_secs: How long audio must contain speech before triggering (in seconds)
   # stop_secs: How long silence must persist before ending speech segment (in seconds)
   # min_volume: Minimum volume threshold (0.0 to 1.0)
@@ -24,7 +22,7 @@ vad:
 continuous_audio:
   # How long to buffer audio before sending to STT (in seconds)
   # Recommended: 2-3 seconds for natural speech segments
-  buffer_duration: 2.5
+  buffer_duration: 3
 
   # Whether to overlap buffers to avoid cutting off words
   # If true, buffers will overlap by 50% (e.g., 2.5s buffer with 1.25s overlap)
@@ -32,11 +30,20 @@ continuous_audio:
 
 # Speech-to-Text Settings
 stt:
-  # Groq Whisper model to use
-  model: "whisper-large-v3-turbo"
+  # Provider: "groq" or "avalon"
+  # - groq: Whisper Large v3 Turbo (general purpose, fast)
+  # - avalon: AquaVoice (developer-optimized, 97.3% accuracy on technical terms, free until Oct 30 2025)
+  provider: "groq"
 
-  # Language code (ISO 639-1)
-  language: "en"
+  # Groq Whisper settings
+  groq:
+    model: "whisper-large-v3-turbo"
+    language: "en"
+
+  # AquaVoice Avalon settings
+  avalon:
+    model: "avalon-1"
+    language: "en"
 
 # LLM Settings (for claim extraction and verification)
 llm:
