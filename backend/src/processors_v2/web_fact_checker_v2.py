@@ -117,10 +117,11 @@ Base your verdict solely on the provided evidence. Never fabricate information."
             start_time = time.time()
 
             # Search for evidence with Exa
+            logger.info(f"[EXA] Searching for evidence: {claim_text}")
             results = await self.exa_client.search_for_claim(claim_text)
 
             exa_latency = (time.time() - start_time) * 1000
-            logger.info(f"Exa search completed in {exa_latency:.0f}ms")
+            logger.info(f"[EXA] Search completed in {exa_latency:.0f}ms, found {len(results) if results else 0} results")
 
             if not results:
                 # No results found
@@ -133,10 +134,11 @@ Base your verdict solely on the provided evidence. Never fabricate information."
                 )
             else:
                 # Verify with Groq using PydanticAI
+                logger.info(f"[GROQ] Verifying claim with {len(results)} evidence passages")
                 verify_start = time.time()
                 verdict = await self._verify_with_groq(claim_text, results)
                 verify_latency = (time.time() - verify_start) * 1000
-                logger.info(f"Groq verification completed in {verify_latency:.0f}ms")
+                logger.info(f"[GROQ] Verification completed in {verify_latency:.0f}ms")
 
             # Cache the result
             self._cache[cache_key] = verdict
