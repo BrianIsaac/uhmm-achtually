@@ -58,7 +58,7 @@ function createOverlay() {
 
   overlayContainer.innerHTML = `
     <div class="uhmm-header">
-      <span class="uhmm-title">📝 Live Transcript</span>
+      <span class="uhmm-title">🔍 Fact Checker</span>
       <div class="uhmm-status">
         <span class="uhmm-status-indicator" id="connection-status"></span>
         <span class="uhmm-status-text" id="status-text">Detected</span>
@@ -144,12 +144,6 @@ function renderTranscript() {
     const itemEl = document.createElement('div');
     itemEl.className = 'uhmm-transcript-item';
 
-    // Speaker and text
-    const textEl = document.createElement('div');
-    textEl.className = 'uhmm-text';
-    textEl.textContent = `${item.speaker}: "${item.text}"`;
-    itemEl.appendChild(textEl);
-
     // Verdict alert (if exists and not supported)
     if (item.verdict) {
       const verdictEl = document.createElement('div');
@@ -178,9 +172,8 @@ function renderTranscript() {
       `;
 
       itemEl.appendChild(verdictEl);
+      transcriptList.appendChild(itemEl);
     }
-
-    transcriptList.appendChild(itemEl);
   });
 
   // Auto-scroll to bottom
