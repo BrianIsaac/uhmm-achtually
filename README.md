@@ -263,7 +263,7 @@ The system supports two STT providers:
 To switch providers, edit `backend/dev_config.yaml`:
 ```yaml
 stt:
-  provider: "avalon"  # Switch from "groq" to "avalon"
+  provider: "groq"  # Switch from "groq" to "avalon"
 ```
 
 ### Allowed Domains
