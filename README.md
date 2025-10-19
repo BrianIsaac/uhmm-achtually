@@ -4,7 +4,7 @@
 
 A real-time fact-checking system that monitors conversations in video meetings and YouTube, extracts factual claims, and verifies them using AI and web search. Features an animated mascot that alerts you when questionable claims are detected.
 
-<br clear="left">
+**Technical Challenge:** Balancing sub-second latency requirements with the reasoning depth needed for accurate fact verification in live conversations.
 
 ## Features
 
@@ -13,7 +13,7 @@ A real-time fact-checking system that monitors conversations in video meetings a
 - **Web-based Verification**: Searches trusted sources to verify claims
 - **Confidence Scoring**: Provides confidence levels for each verdict
 - **Chrome Extension**: Animated mascot with speech bubbles for visual fact-check alerts
-- **Fast Response**: Sub-500ms search latency for quick fact-checking
+- **Optimised Pipeline**: 1.5-2.5s end-to-end latency whilst maintaining reasoning quality
 
 ## Architecture
 
@@ -183,6 +183,14 @@ Once both the backend server and Chrome extension are running:
 
 ## Usage Examples
 
+### Demo: Fact-Checking in Action
+
+<p align="center">
+  <img src="chrome-extension/assets/demo.png" alt="Uhmm Achtually detecting a false claim on YouTube" width="800">
+</p>
+
+The screenshot shows the extension fact-checking a YouTube video claiming **"HTML is for back-end development"**. The mascot appears in the bottom-right with a red speech bubble indicating the claim is **contradicted** with 90% confidence, along with a rationale and evidence link.
+
 ### Backend Console Output
 
 When the backend is running, you'll see real-time processing in the terminal:
@@ -191,17 +199,17 @@ When the backend is running, you'll see real-time processing in the terminal:
 INFO:     Started server process
 INFO:     Uvicorn running on http://localhost:8765
 INFO:     WebSocket connection established
-INFO:     Transcribing: "Python 3.12 removed the distutils package"
+INFO:     Transcribing: "HTML is for back-end development"
 INFO:     Extracting claims from transcript
-INFO:     Found 1 claim: Python 3.12 removed the distutils package
+INFO:     Found 1 claim: HTML is for back-end development
 INFO:     Searching for evidence...
-INFO:     Verdict: supported (95% confidence)
+INFO:     Verdict: contradicted (90% confidence)
 INFO:     Sent verdict to Chrome extension
 ```
 
 ### Chrome Extension Experience
 
-When someone makes a false claim in a meeting:
+When someone makes a false claim in a video:
 
 1. **Audio captured**: System picks up the conversation
 2. **Claim detected**: AI identifies a factual claim
@@ -210,7 +218,7 @@ When someone makes a false claim in a meeting:
    - Mascot animates to "talking" pose
    - Speech bubble appears with verdict
    - Red bubble: "This claim is contradicted by evidence"
-   - Shows 85% confidence with link to source
+   - Shows 90% confidence with link to source
 
 ## Configuration
 
@@ -260,12 +268,18 @@ stt:
 
 ### Allowed Domains
 
-The fact-checker searches only trusted domains specified in ALLOWED_DOMAINS. Default domains include:
+The fact-checker searches only trusted domains specified in ALLOWED_DOMAINS. This constraint serves two purposes:
+1. **Speed**: Reduces search space for faster results (<500ms)
+2. **Reliability**: Ensures evidence comes from authoritative sources
+
+Default domains include:
 - docs.python.org (Python documentation)
 - kubernetes.io (Kubernetes docs)
 - owasp.org (Security best practices)
 - nist.gov (Standards and guidelines)
 - postgresql.org (PostgreSQL documentation)
+
+Add your own trusted sources by updating `backend/.env`.
 
 ## Troubleshooting
 
@@ -321,13 +335,48 @@ Update the ALLOWED_DOMAINS environment variable in `backend/.env`:
 ALLOWED_DOMAINS=docs.python.org,stackoverflow.com,developer.mozilla.org
 ```
 
-## API Performance
+## Performance & Latency Optimisation
 
-- **Exa Search**: < 500ms latency (keyword mode)
-- **Groq STT**: ~200-400ms for short utterances
-- **Claim Extraction**: ~200-300ms
-- **Verification**: ~500-800ms
-- **Total Pipeline**: ~1.5-2.5 seconds end-to-end
+### The Latency-Reasoning Trade-off
+
+Real-time fact-checking presents a fundamental challenge: **how quickly can we verify claims without sacrificing accuracy?** Conversations move fast, and users expect near-instant feedback, yet thorough fact-checking requires:
+
+1. Understanding context and nuance in claims
+2. Searching multiple sources for evidence
+3. Reasoning about contradictions and reliability
+4. Generating confident verdicts
+
+### Our Approach
+
+We optimise the pipeline at each stage to minimise latency whilst maintaining reasoning quality:
+
+| Component | Latency | Optimisation Strategy |
+|-----------|---------|----------------------|
+| **Speech-to-Text** | 200-400ms | Groq's optimised Whisper Large v3 with streaming |
+| **Claim Extraction** | 200-300ms | PydanticAI with Llama 3.3 70B (structured outputs, low temperature) |
+| **Web Search** | <500ms | Exa keyword mode on pre-filtered trusted domains |
+| **Verification** | 500-800ms | Focused prompts with evidence pre-filtering |
+| **Total Pipeline** | **1.5-2.5s** | End-to-end fact-check delivered to user |
+
+### Key Design Decisions
+
+**Speed optimisations:**
+- **Keyword search over neural search**: Exa's keyword mode is 3-5x faster whilst maintaining relevance on domain-filtered results
+- **Sentence-level chunking**: Process claims as complete sentences arrive, don't wait for full paragraphs
+- **Pre-filtered domains**: ALLOWED_DOMAINS constraint reduces search space and improves speed
+- **Structured outputs**: PydanticAI enforces strict schemas, eliminating parsing overhead
+- **Low temperature (0.1)**: Reduces model reasoning time whilst maintaining accuracy for factual tasks
+
+**Reasoning quality:**
+- **70B parameter model**: Llama 3.3 70B provides strong reasoning whilst being faster than 405B models
+- **Two-stage AI pipeline**: Separate claim extraction and verification agents for specialised reasoning
+- **Evidence-based verification**: LLM evaluates actual source content, not just search snippets
+- **Confidence scoring**: Expresses uncertainty when evidence is insufficient
+
+**Trade-offs we accept:**
+- May miss subtle claims that require multi-sentence context (sentence-level processing)
+- Limited to pre-approved domains (won't find evidence on new or niche sites)
+- Favours precision over recall (alerts only on contradicted/unclear claims, not all claims)
 
 ## Architecture Details
 
@@ -342,12 +391,21 @@ ALLOWED_DOMAINS=docs.python.org,stackoverflow.com,developer.mozilla.org
 7. **Verification**: PydanticAI analyses evidence and generates verdict
 8. **WebSocket Delivery**: Verdict sent to Chrome extension in real-time
 
-### Key Design Decisions
+### Why This Architecture?
 
-- **PydanticAI**: Ensures structured, consistent AI outputs
-- **Keyword Search**: Prioritizes speed over neural search quality
-- **Domain Filtering**: Limits search to trusted sources for reliability
-- **Inline Processing**: Simplified architecture without complex pipelines
+**Clean separation of concerns:**
+- API layer handles WebSocket/HTTP communication
+- Core layer contains business logic (fact-checking, NLP)
+- Infrastructure layer manages external API clients
+- Domain layer defines interfaces and models
+
+**Dependency injection:**
+- Services are injected via constructors, making testing and swapping implementations easy
+- Example: Switch from Groq STT to Avalon STT by changing config, no code changes needed
+
+**Message factory pattern:**
+- Consistent message formatting for WebSocket communication
+- Simplifies debugging and ensures protocol compliance
 
 ## Contributing
 
@@ -369,6 +427,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [FastAPI](https://fastapi.tiangolo.com/) for the WebSocket server framework
 - [Pipecat](https://github.com/pipecat-ai/pipecat) for audio processing components
 - [Avalon](https://avalon.ai) for alternative STT services
+
+---
 
 <br>
 <p align="right">
